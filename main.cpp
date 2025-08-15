@@ -5,8 +5,8 @@
  * @copyright Copyright (c) 2022-2023
  */
 
-#include "OrbitalSim.h"
-#include "View.h"
+#include "orbitalSim.h"
+#include "view.h"
 
 #define SECONDS_PER_DAY 86400
 

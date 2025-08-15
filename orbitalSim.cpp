@@ -11,7 +11,7 @@
 #include <stdlib.h>
 #include <math.h>
 
-#include "OrbitalSim.h"
+#include "orbitalSim.h"
 #include "ephemerides.h"
 
 #define GRAVITATIONAL_CONSTANT 6.6743E-11F
@@ -68,10 +68,6 @@ void configureAsteroid(OrbitalBody *body, float centerMass)
 OrbitalSim *constructOrbitalSim(float timeStep)
 {
     // Your code goes here...
-
-
-
-    return NULL; // This should return your orbital sim
 }
 
 /**
@@ -80,8 +76,6 @@ OrbitalSim *constructOrbitalSim(float timeStep)
 void destroyOrbitalSim(OrbitalSim *sim)
 {
     // Your code goes here...
-
-
 }
 
 /**
@@ -91,7 +85,5 @@ void destroyOrbitalSim(OrbitalSim *sim)
  */
 void updateOrbitalSim(OrbitalSim *sim)
 {
-    // Your code goes here...
-   
 
 }
