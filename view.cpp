@@ -79,6 +79,7 @@ bool isViewRendering(View *view)
     return !WindowShouldClose();
 }
 
+#include <stdio.h>
 /**
  * Renders an orbital simulation
  *
@@ -94,16 +95,22 @@ void renderView(View *view, OrbitalSim *sim)
     ClearBackground(BLACK);
     BeginMode3D(view->camera);
 
-    // Fill in your 3D drawing code here:
-
-
+    for (int i = 0; i < sim->numBodies; i++) {
+        OrbitalBody &body = sim->bodies[i];
+        DrawSphere(body.position, body.radius, body.color);
+        DrawPoint3D(body.position, body.color);
+        printf("Body %d: Position = %f, %f, %f\n",
+               i,
+               body.position.x,
+               body.position.y,
+               body.position.z);
+    }
 
     DrawGrid(10, 10.0f);
     EndMode3D();
 
-    // Fill in your 2D drawing code here:
-
-
+    float timestamp = sim->timeStep; // O lleva un acumulador de tiempo en tu simulación
+    DrawText(getISODate(timestamp), 20, 20, 20, RAYWHITE);
 
     EndDrawing();
 }

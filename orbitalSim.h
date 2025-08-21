@@ -19,7 +19,7 @@ struct OrbitalBody
     Vector3 velocity;
     float mass;
 	float radius;
-	Color color;
+	CLITERAL(Color) color;
 };
 
 
@@ -31,7 +31,7 @@ struct OrbitalSim
     // Fill in your code here...
    float timeStep; // Time step in seconds
    OrbitalBody *bodies; // Array of orbital bodies
-   int bodyCount; // Number of orbital bodies
+   int numBodies; // Number of orbital bodies
    float centerMass; // Mass of the most massive object in the star system
    float centerRadius; // Radius of the most massive object in the star system
 
