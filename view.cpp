@@ -109,8 +109,11 @@ void renderView(View *view, OrbitalSim *sim)
     DrawGrid(10, 10.0f);
     EndMode3D();
 
-    float timestamp = sim->timeStep; // O lleva un acumulador de tiempo en tu simulación
+    static float timestamp = 0.0f; // O lleva un acumulador de tiempo en tu simulación
+    timestamp += sim->timeStep;
+    printf("%f", timestamp);
     DrawText(getISODate(timestamp), 20, 20, 20, RAYWHITE);
+    DrawFPS(WINDOW_WIDTH * 0.1, WINDOW_HEIGHT * (1 - 0.05));
 
     EndDrawing();
 }
