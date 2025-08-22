@@ -32,8 +32,8 @@ struct OrbitalSim
    float timeStep; // Time step in seconds
    OrbitalBody *bodies; // Array of orbital bodies
    int numBodies; // Number of orbital bodies
-   float centerMass; // Mass of the most massive object in the star system
    float centerRadius; // Radius of the most massive object in the star system
+   float scaledG;
 
 };
 

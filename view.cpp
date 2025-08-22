@@ -99,11 +99,6 @@ void renderView(View *view, OrbitalSim *sim)
         OrbitalBody &body = sim->bodies[i];
         DrawSphere(body.position, body.radius, body.color);
         DrawPoint3D(body.position, body.color);
-        printf("Body %d: Position = %f, %f, %f\n",
-               i,
-               body.position.x,
-               body.position.y,
-               body.position.z);
     }
 
     DrawGrid(10, 10.0f);
@@ -111,9 +106,8 @@ void renderView(View *view, OrbitalSim *sim)
 
     static float timestamp = 0.0f; // O lleva un acumulador de tiempo en tu simulación
     timestamp += sim->timeStep;
-    printf("%f", timestamp);
-    DrawText(getISODate(timestamp), 20, 20, 20, RAYWHITE);
-    DrawFPS(WINDOW_WIDTH * 0.1, WINDOW_HEIGHT * (1 - 0.05));
+    DrawText(getISODate(timestamp), WINDOW_WIDTH * 0.03, WINDOW_HEIGHT * 0.03, 20, RAYWHITE);
+    DrawFPS(WINDOW_WIDTH * 0.03, WINDOW_HEIGHT * (1 - 0.05));
 
     EndDrawing();
 }
