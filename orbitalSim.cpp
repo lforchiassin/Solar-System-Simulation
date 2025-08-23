@@ -16,10 +16,10 @@
 
 #define GRAVITATIONAL_CONSTANT 6.6743E-11F
 #define ASTEROIDS_MEAN_RADIUS 4E11F
-#define NUM_ASTEROIDS 500
+#define NUM_ASTEROIDS 50
 #define SCALE_FACTOR 1E-11F
 
-#define NUM_BODIES (NUM_ASTEROIDS + SOLARSYSTEM_BODYNUM)
+#define NUM_BODIES (NUM_ASTEROIDS + SOLARSYSTEM_BODYNUM + ALPHACENTAURISYSTEM_BODYNUM)
 #define RADIUS_SCALE(r) (0.005F * logf(r))
 
 static void calculateAccelerationsOptimized(OrbitalBody *bodies, Vector3 *accelerations, int n, float G);
@@ -88,7 +88,7 @@ OrbitalSim *constructOrbitalSim(float timeStep)
     }
 
     // Copia los datos de los cuerpos del sistema solar
-	int i;
+	int i, j;
     for (i = 0; i < SOLARSYSTEM_BODYNUM; i++) {
         sim->bodies[i].mass = solarSystem[i].mass;
         sim->bodies[i].radius = RADIUS_SCALE(solarSystem[i].radius);
@@ -110,7 +110,28 @@ OrbitalSim *constructOrbitalSim(float timeStep)
                sim->bodies[i].velocity.z);
     }
 
-	for(; i < sim->numBodies; i++) {
+    for (j=0; i < ALPHACENTAURISYSTEM_BODYNUM; i++, j++) {
+        sim->bodies[i].mass = alphaCentauriSystem[j].mass;
+        sim->bodies[i].radius = RADIUS_SCALE(alphaCentauriSystem[j].radius);
+
+        sim->bodies[i].position = Vector3Scale(alphaCentauriSystem[j].position, SCALE_FACTOR);
+        sim->bodies[i].velocity = Vector3Scale(alphaCentauriSystem[j].velocity, SCALE_FACTOR);
+
+        sim->bodies[i].color = alphaCentauriSystem[j].color;
+
+        printf("Body %d: Mass = %f, Radius = %f, Position = %f, %f, %f, Velocity = %f, %f, %f\n",
+            i,
+            sim->bodies[i].mass,
+            sim->bodies[i].radius,
+            sim->bodies[i].position.x,
+            sim->bodies[i].position.y,
+            sim->bodies[i].position.z,
+            sim->bodies[i].velocity.x,
+            sim->bodies[i].velocity.y,
+            sim->bodies[i].velocity.z);
+    }
+
+	for (; i < sim->numBodies; i++) {
         configureAsteroid(&sim->bodies[i], solarSystem[0].mass);
     }
 
