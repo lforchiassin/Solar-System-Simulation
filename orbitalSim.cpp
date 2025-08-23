@@ -110,7 +110,7 @@ OrbitalSim *constructOrbitalSim(float timeStep)
                sim->bodies[i].velocity.z);
     }
 
-    for (j=0; i < ALPHACENTAURISYSTEM_BODYNUM; i++, j++) {
+    /*for (j = 0; i < SOLARSYSTEM_BODYNUM + ALPHACENTAURISYSTEM_BODYNUM; i++, j++) {
         sim->bodies[i].mass = alphaCentauriSystem[j].mass;
         sim->bodies[i].radius = RADIUS_SCALE(alphaCentauriSystem[j].radius);
 
@@ -129,7 +129,7 @@ OrbitalSim *constructOrbitalSim(float timeStep)
             sim->bodies[i].velocity.x,
             sim->bodies[i].velocity.y,
             sim->bodies[i].velocity.z);
-    }
+    }*/
 
 	for (; i < sim->numBodies; i++) {
         configureAsteroid(&sim->bodies[i], solarSystem[0].mass);
