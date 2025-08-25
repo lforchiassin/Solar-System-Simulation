@@ -95,6 +95,7 @@ void renderView(View *view, OrbitalSim *sim)
     ClearBackground(BLACK);
     BeginMode3D(view->camera);
 
+
     for (int i = 0; i < sim->numBodies; i++) {
         OrbitalBody &body = sim->bodies[i];
         DrawSphere(body.position, body.radius, body.color);
