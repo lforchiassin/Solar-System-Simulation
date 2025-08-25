@@ -26,6 +26,7 @@ struct EphemeridesBody
  * 
  * @cite https://ssd.jpl.nasa.gov/horizons/app.html#/
 */
+
 EphemeridesBody solarSystem[] = {
     {
         "Sol",
@@ -108,6 +109,7 @@ EphemeridesBody solarSystem[] = {
  * 
  * @cite https://ssd.jpl.nasa.gov/horizons/app.html#/
 */
+
 EphemeridesBody alphaCentauriSystem[] = {
     {
         "Alfa Centauri A",

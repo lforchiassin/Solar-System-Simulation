@@ -6,7 +6,15 @@
  */
 
 // Enables M_PI #define in Windows
+//falta ver la superfuncion el estilo!!!!
+
 #define _USE_MATH_DEFINES
+#define GRAVITATIONAL_CONSTANT 6.6743E-11F
+#define ASTEROIDS_MEAN_RADIUS 4E11F
+#define NUM_ASTEROIDS 500
+#define SCALE_FACTOR 1E-11F
+#define NUM_BODIES (NUM_ASTEROIDS + SOLARSYSTEM_BODYNUM + ALPHACENTAURISYSTEM_BODYNUM)
+#define RADIUS_SCALE(r) (0.005F * logf(r))
 
 #include <stdlib.h>
 #include <math.h>
@@ -14,15 +22,6 @@
 #include "orbitalSim.h"
 #include "ephemerides.h"
 
-#define GRAVITATIONAL_CONSTANT 6.6743E-11F
-#define ASTEROIDS_MEAN_RADIUS 4E11F
-#define NUM_ASTEROIDS 1000
-#define SCALE_FACTOR 1E-11F
-
-#define NUM_BODIES (NUM_ASTEROIDS + SOLARSYSTEM_BODYNUM)
-#define RADIUS_SCALE(r) (0.005F * logf(r))
-
-static void calculateAccelerationsHybrid(OrbitalBody *bodies, Vector3 *accelerations, int n, float G);
 static void calculateAccelerationsOptimized(OrbitalBody *bodies, Vector3 *accelerations, int n, float G);
 
 /**
@@ -32,8 +31,8 @@ static void calculateAccelerationsOptimized(OrbitalBody *bodies, Vector3 *accele
  * @param max Maximum value
  * @return The random value
  */
-float getRandomFloat(float min, float max)
-{
+
+float getRandomFloat(float min, float max){
     return min + (max - min) * rand() / (float)RAND_MAX;
 }
 
@@ -43,8 +42,8 @@ float getRandomFloat(float min, float max)
  * @param body An orbital body
  * @param centerMass The mass of the most massive object in the star system
  */
-void configureAsteroid(OrbitalBody *body, float centerMass)
-{
+
+void configureAsteroid(OrbitalBody *body, float centerMass){
     // Logit distribution
     float x = getRandomFloat(0, 1);
     float l = logf(x) - logf(1 - x) + 1;
@@ -67,16 +66,16 @@ void configureAsteroid(OrbitalBody *body, float centerMass)
     body->velocity = {-v * sinf(phi) * SCALE_FACTOR, vy * SCALE_FACTOR, v * cosf(phi) * SCALE_FACTOR};
 }
 
-
 #include <stdio.h>
+
 /**
  * @brief Constructs an orbital simulation
  *
  * @param float The time step
  * @return The orbital simulation
  */
-OrbitalSim *constructOrbitalSim(float timeStep)
-{
+
+OrbitalSim *constructOrbitalSim(float timeStep){
     OrbitalSim *sim = (OrbitalSim *)malloc(sizeof(OrbitalSim));
     if (!sim) return NULL;
 
@@ -111,25 +110,25 @@ OrbitalSim *constructOrbitalSim(float timeStep)
     //            sim->bodies[i].velocity.z);
     }
 
-    /*for (j = 0; i < SOLARSYSTEM_BODYNUM + ALPHACENTAURISYSTEM_BODYNUM; i++, j++) {
-        sim->bodies[i].mass = alphaCentauriSystem[j].mass;
-        sim->bodies[i].radius = RADIUS_SCALE(alphaCentauriSystem[j].radius);
+    /*for (j = 0; j < ALPHACENTAURISYSTEM_BODYNUM; j++) {
+        sim->bodies[j].mass = alphaCentauriSystem[j].mass;
+        sim->bodies[j].radius = RADIUS_SCALE(alphaCentauriSystem[j].radius);
 
-        sim->bodies[i].position = Vector3Scale(alphaCentauriSystem[j].position, SCALE_FACTOR);
-        sim->bodies[i].velocity = Vector3Scale(alphaCentauriSystem[j].velocity, SCALE_FACTOR);
+        sim->bodies[j].position = Vector3Scale(alphaCentauriSystem[j].position, SCALE_FACTOR);
+        sim->bodies[j].velocity = Vector3Scale(alphaCentauriSystem[j].velocity, SCALE_FACTOR);
 
-        sim->bodies[i].color = alphaCentauriSystem[j].color;
+        sim->bodies[j].color = alphaCentauriSystem[j].color;
 
         printf("Body %d: Mass = %f, Radius = %f, Position = %f, %f, %f, Velocity = %f, %f, %f\n",
-            i,
-            sim->bodies[i].mass,
-            sim->bodies[i].radius,
-            sim->bodies[i].position.x,
-            sim->bodies[i].position.y,
-            sim->bodies[i].position.z,
-            sim->bodies[i].velocity.x,
-            sim->bodies[i].velocity.y,
-            sim->bodies[i].velocity.z);
+            j,
+            sim->bodies[j].mass,
+            sim->bodies[j].radius,
+            sim->bodies[j].position.x,
+            sim->bodies[j].position.y,
+            sim->bodies[j].position.z,
+            sim->bodies[j].velocity.x,
+            sim->bodies[j].velocity.y,
+            sim->bodies[j].velocity.z);
     }*/
 
 	for (; i < sim->numBodies; i++) {
@@ -152,8 +151,8 @@ OrbitalSim *constructOrbitalSim(float timeStep)
 /**
  * @brief Destroys an orbital simulation
  */
-void destroyOrbitalSim(OrbitalSim *sim)
-{
+
+void destroyOrbitalSim(OrbitalSim *sim){
     if (!sim) return;
     if (sim->bodies) free(sim->bodies);
     free(sim);
@@ -164,8 +163,8 @@ void destroyOrbitalSim(OrbitalSim *sim)
  *
  * @param sim The orbital simulation
  */
-void updateOrbitalSim(OrbitalSim *sim)
-{
+
+void updateOrbitalSim(OrbitalSim* sim){
     int n = sim->numBodies;
     float dt = sim->timeStep;
     OrbitalBody *bodies = sim->bodies;
@@ -197,8 +196,7 @@ void updateOrbitalSim(OrbitalSim *sim)
     free(accelerations);
 }
 
-static void calculateAccelerationsOptimized(OrbitalBody* bodies, Vector3* accelerations, int n, float G)
-{
+static void calculateAccelerationsOptimized(OrbitalBody* bodies, Vector3* accelerations, int n, float G){
     const float distant_threshold = 10.0f; // UA - más allá se usa aproximación
     const float epsilon = 1e-12f;
 
@@ -306,4 +304,3 @@ static void calculateAccelerationsOptimized(OrbitalBody* bodies, Vector3* accele
         }
     }
 }
-

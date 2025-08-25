@@ -12,8 +12,8 @@
 /**
  * @brief Orbital body definition
  */
-struct OrbitalBody
-{
+
+struct OrbitalBody{
     // Fill in your code here...
     Vector3 position;
     Vector3 velocity;
@@ -22,12 +22,11 @@ struct OrbitalBody
 	CLITERAL(Color) color;
 };
 
-
 /**
  * @brief Orbital simulation definition
  */
-struct OrbitalSim
-{
+
+struct OrbitalSim{
     // Fill in your code here...
    float timeStep; // Time step in seconds
    OrbitalBody *bodies; // Array of orbital bodies
@@ -39,7 +38,6 @@ struct OrbitalSim
 
 OrbitalSim *constructOrbitalSim(float timeStep);
 void destroyOrbitalSim(OrbitalSim *sim);
-
 void updateOrbitalSim(OrbitalSim *sim);
 
 #endif
