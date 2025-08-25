@@ -98,8 +98,16 @@ void renderView(View *view, OrbitalSim *sim)
 
     for (int i = 0; i < sim->numBodies; i++) {
         OrbitalBody &body = sim->bodies[i];
-        DrawSphere(body.position, body.radius, body.color);
-        DrawPoint3D(body.position, body.color);
+       
+        if (i < 9) {
+             DrawSphere(body.position, body.radius, body.color);
+
+        }
+        else {
+            DrawSphereEx(body.position, body.radius, 5, 5, body.color);
+        }
+       
+        //DrawPoint3D(body.position, body.color);
     }
 
     DrawGrid(10, 10.0f);

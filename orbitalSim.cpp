@@ -197,30 +197,113 @@ void updateOrbitalSim(OrbitalSim *sim)
     free(accelerations);
 }
 
-static void calculateAccelerationsOptimized(OrbitalBody *bodies, Vector3 *accelerations, int n, float G)
+static void calculateAccelerationsOptimized(OrbitalBody* bodies, Vector3* accelerations, int n, float G)
 {
+    const float distant_threshold = 10.0f; // UA - más allá se usa aproximación
+    const float epsilon = 1e-12f;
+
     // Inicializar aceleraciones
     for (int i = 0; i < n; i++) {
-        accelerations[i] = {0.0f, 0.0f, 0.0f};
+        accelerations[i] = { 0.0f, 0.0f, 0.0f };
     }
-    
-    // Calcular fuerzas entre pares únicos
-    for (int i = 0; i < n; i++) {
-        for (int j = i + 1; j < n; j++) 
-        {
-            if(i > SOLARSYSTEM_BODYNUM && j > SOLARSYSTEM_BODYNUM) continue; // No calcular interacciones entre asteroides
+
+    // Calcular fuerzas Sol-Planetas (sin cambios)
+    for (int j = 1; j <= SOLARSYSTEM_BODYNUM; j++) {
+        Vector3 r_vec = Vector3Subtract(bodies[j].position, bodies[0].position);
+        float r_squared = Vector3LengthSqr(r_vec);
+        if (r_squared < epsilon) continue;
+        float r_cubed = r_squared * sqrtf(r_squared);
+        float force_magnitude = G * bodies[0].mass * bodies[j].mass / r_cubed;
+        Vector3 force_on_sun = Vector3Scale(r_vec, force_magnitude / bodies[0].mass);
+        Vector3 force_on_planet = Vector3Scale(r_vec, -force_magnitude / bodies[j].mass);
+        accelerations[0] = Vector3Add(accelerations[0], force_on_sun);
+        accelerations[j] = Vector3Add(accelerations[j], force_on_planet);
+    }
+
+    // Calcular fuerzas Planetas-Planetas (sin cambios)
+    for (int i = 1; i <= SOLARSYSTEM_BODYNUM; i++) {
+        for (int j = i + 1; j <= SOLARSYSTEM_BODYNUM; j++) {
             Vector3 r_vec = Vector3Subtract(bodies[j].position, bodies[i].position);
             float r_squared = Vector3LengthSqr(r_vec);
-
-            if (r_squared == 0) continue; // Evitar división por cero
+            if (r_squared < epsilon) continue;
             float r_cubed = r_squared * sqrtf(r_squared);
             float force_magnitude = G * bodies[i].mass * bodies[j].mass / r_cubed;
-
             Vector3 force_on_i = Vector3Scale(r_vec, force_magnitude / bodies[i].mass);
             Vector3 force_on_j = Vector3Scale(r_vec, -force_magnitude / bodies[j].mass);
-            
             accelerations[i] = Vector3Add(accelerations[i], force_on_i);
             accelerations[j] = Vector3Add(accelerations[j], force_on_j);
         }
     }
+
+    // OPTIMIZACIÓN PRINCIPAL: Clasificar asteroides por distancia
+    int num_asteroids = n - SOLARSYSTEM_BODYNUM - 1;
+    int asteroid_start = SOLARSYSTEM_BODYNUM + 1;
+
+    // Pre-calcular centro de masa planetario para aproximaciones
+    Vector3 planetary_center = { 0, 0, 0 };
+    float total_planetary_mass = 0;
+    for (int j = 1; j <= SOLARSYSTEM_BODYNUM; j++) {
+        Vector3 weighted_pos = Vector3Scale(bodies[j].position, bodies[j].mass);
+        planetary_center = Vector3Add(planetary_center, weighted_pos);
+        total_planetary_mass += bodies[j].mass;
+    }
+    if (total_planetary_mass > 0) {
+        planetary_center = Vector3Scale(planetary_center, 1.0f / total_planetary_mass);
+    }
+
+    // Procesar asteroides
+    for (int i = asteroid_start; i < n; i++) {
+        Vector3 asteroid_pos = bodies[i].position;
+        float asteroid_mass = bodies[i].mass;
+
+        // Asteroide con Sol (siempre directo)
+        Vector3 r_vec = Vector3Subtract(bodies[0].position, asteroid_pos);
+        float r_squared = Vector3LengthSqr(r_vec);
+        if (r_squared > epsilon) {
+            float r_cubed = r_squared * sqrtf(r_squared);
+            float force_magnitude = G * asteroid_mass * bodies[0].mass / r_cubed;
+            Vector3 force_on_asteroid = Vector3Scale(r_vec, force_magnitude / asteroid_mass);
+            Vector3 force_on_sun = Vector3Scale(r_vec, -force_magnitude / bodies[0].mass);
+            accelerations[i] = Vector3Add(accelerations[i], force_on_asteroid);
+            accelerations[0] = Vector3Add(accelerations[0], force_on_sun);
+        }
+
+        // Verificar distancia al centro planetario
+        Vector3 r_to_planets = Vector3Subtract(planetary_center, asteroid_pos);
+        float dist_to_planets = Vector3Length(r_to_planets);
+
+        if (dist_to_planets > distant_threshold) {
+            // APROXIMACIÓN: Usar centro de masa planetario
+            if (dist_to_planets > 0) {
+                float r_cubed = dist_to_planets * dist_to_planets * dist_to_planets;
+                float force_magnitude = G * asteroid_mass * total_planetary_mass / r_cubed;
+                Vector3 force_on_asteroid = Vector3Scale(r_to_planets, force_magnitude / asteroid_mass);
+                accelerations[i] = Vector3Add(accelerations[i], force_on_asteroid);
+
+                // Distribuir la fuerza inversa entre planetas proporcionalmente
+                for (int j = 1; j <= SOLARSYSTEM_BODYNUM; j++) {
+                    float planet_fraction = bodies[j].mass / total_planetary_mass;
+                    Vector3 force_on_planet = Vector3Scale(r_to_planets, -force_magnitude * planet_fraction / bodies[j].mass);
+                    accelerations[j] = Vector3Add(accelerations[j], force_on_planet);
+                }
+            }
+        }
+        else {
+            // CÁLCULO DIRECTO para asteroides cercanos
+            for (int j = 1; j <= SOLARSYSTEM_BODYNUM; j++) {
+                r_vec = Vector3Subtract(bodies[j].position, asteroid_pos);
+                r_squared = Vector3LengthSqr(r_vec);
+                if (r_squared < EPSILON) continue;
+
+                float r_cubed = r_squared * sqrtf(r_squared);
+                float force_magnitude = G * asteroid_mass * bodies[j].mass / r_cubed;
+                Vector3 force_on_asteroid = Vector3Scale(r_vec, force_magnitude / asteroid_mass);
+                Vector3 force_on_planet = Vector3Scale(r_vec, -force_magnitude / bodies[j].mass);
+
+                accelerations[i] = Vector3Add(accelerations[i], force_on_asteroid);
+                accelerations[j] = Vector3Add(accelerations[j], force_on_planet);
+            }
+        }
+    }
 }
+
