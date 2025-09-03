@@ -12,6 +12,8 @@
 
 #define WINDOW_WIDTH 1280
 #define WINDOW_HEIGHT 720
+#define SCALE_FACTOR 1E-11F
+#define RADIUS_SCALE(r) (0.005F * logf(r))
 
  /**
   * @brief Converts a timestamp (number of seconds since 1/1/2022)
@@ -107,6 +109,11 @@ bool isViewRendering(View* view) {
  */
 
 void renderView(View* view, OrbitalSim* sim) {
+    static float lodMultiplier = 1.0f;
+    if (IsKeyPressed(KEY_E)) lodMultiplier *= 1.2f;     // + para ver más asteroides
+    if (IsKeyPressed(KEY_X)) lodMultiplier *= 0.8f;     // - para ver menos asteroides
+    if (IsKeyPressed(KEY_R)) lodMultiplier = 1.0f;      // R para resetear
+
     // Para la rotación y posición de la nave
     static float shipRotationAngle = 0.0f;
     static float shipRotationSpeed = 90.0f; // grados por segundo
@@ -177,14 +184,96 @@ void renderView(View* view, OrbitalSim* sim) {
     ClearBackground(BLACK);
     BeginMode3D(view->camera);
 
-    // Dibujar cuerpos celestes
+    // LOD dinámico ajustable
+    float baseLOD = (10.0f / tanf(view->camera.fovy * 0.5f * DEG2RAD)) * lodMultiplier;
+    const float LOD_HIGH = baseLOD * 0.3f;
+    const float LOD_MEDIUM = baseLOD * 0.8f;
+    const float LOD_LOW = baseLOD * 2.0f;
+    const float LOD_CULL = baseLOD * 5.0f;
+
+    // Planetas con distancias aún más generosas
+    const float PLANET_LOD_CULL = baseLOD * 15.0f;
+
+    int rendered_planets = 0;
+    int rendered_asteroids = 0;
+
     for (int i = 0; i < sim->numBodies; i++) {
         OrbitalBody& body = sim->bodies[i];
+        Vector3 scaledPosition = Vector3Scale(body.position, SCALE_FACTOR);
+        float distance = Vector3Distance(view->camera.position, scaledPosition);
+
         if (i < 9) {
-            DrawSphere(body.position, body.radius, body.color);
+            // PLANETAS - 6 niveles de LOD
+            if (distance > PLANET_LOD_CULL) continue;
+
+            float radius = RADIUS_SCALE(body.radius);
+            float relativeDistance = distance / PLANET_LOD_CULL; // 0.0 = muy cerca, 1.0 = muy lejos
+
+            if (relativeDistance < 0.1f) {
+                // Nivel 0 - Máximo detalle
+                DrawSphere(scaledPosition, radius, body.color);
+            }
+            else if (relativeDistance < 0.2f) {
+                // Nivel 1 - Alta resolución
+                DrawSphereEx(scaledPosition, radius, 20, 20, body.color);
+            }
+            else if (relativeDistance < 0.4f) {
+                // Nivel 2 - Resolución media-alta
+                DrawSphereEx(scaledPosition, radius * 0.95f, 16, 16, body.color);
+            }
+            else if (relativeDistance < 0.6f) {
+                // Nivel 3 - Resolución media
+                DrawSphereEx(scaledPosition, radius * 0.9f, 12, 12, body.color);
+            }
+            else if (relativeDistance < 0.8f) {
+                // Nivel 4 - Resolución baja
+                DrawSphereEx(scaledPosition, radius * 0.8f, 8, 8, body.color);
+            }
+            else {
+                // Nivel 5 - Resolución mínima
+                DrawSphereEx(scaledPosition, radius * 0.7f, 6, 6, body.color);
+            }
+            rendered_planets++;
         }
         else {
-            DrawSphereEx(body.position, body.radius, 5, 5, body.color);
+            // ASTEROIDES - 5 niveles de LOD
+            if (distance > LOD_CULL) continue;
+
+            float lodFactor = 1.0f;
+            float relativeDistance = distance / LOD_CULL;
+
+            // Calcular factor LOD basado en distancia
+            if (relativeDistance > 0.8f) lodFactor = 0.05f;      // 1/20
+            else if (relativeDistance > 0.6f) lodFactor = 0.1f;  // 1/10
+            else if (relativeDistance > 0.4f) lodFactor = 0.25f; // 1/4
+            else if (relativeDistance > 0.2f) lodFactor = 0.5f;  // 1/2
+            // else lodFactor = 1.0f (todos)
+
+            if (((i * 73 + 17) % 1000) < (int)(lodFactor * 1000)) {
+                float asteroidRadius = RADIUS_SCALE(body.radius) * 0.3f;
+
+                if (relativeDistance < 0.1f) {
+                    // Nivel 0 - Esfera completa
+                    DrawSphere(scaledPosition, asteroidRadius, body.color);
+                }
+                else if (relativeDistance < 0.3f) {
+                    // Nivel 1 - Esfera media resolución
+                    DrawSphereEx(scaledPosition, asteroidRadius, 10, 10, body.color);
+                }
+                else if (relativeDistance < 0.5f) {
+                    // Nivel 2 - Esfera baja resolución
+                    DrawSphereEx(scaledPosition, asteroidRadius * 0.8f, 6, 6, body.color);
+                }
+                else if (relativeDistance < 0.7f) {
+                    // Nivel 3 - Esfera muy simple
+                    DrawSphereEx(scaledPosition, asteroidRadius * 0.6f, 4, 4, body.color);
+                }
+                else {
+                    // Nivel 4 - Solo punto
+                    DrawPoint3D(scaledPosition, body.color);
+                }
+                rendered_asteroids++;
+            }
         }
     }
 
@@ -217,6 +306,14 @@ void renderView(View* view, OrbitalSim* sim) {
     timestamp += sim->timeStep;
     DrawText(getISODate(timestamp), WINDOW_WIDTH * 0.03, WINDOW_HEIGHT * 0.03, 20, RAYWHITE);
     DrawFPS(WINDOW_WIDTH * 0.03, WINDOW_HEIGHT * (1 - 0.05));
+    DrawText(TextFormat("Planets: %d/9", rendered_planets),
+        WINDOW_WIDTH * 0.03, WINDOW_HEIGHT * 0.08, 16, RAYWHITE);
+    DrawText(TextFormat("Asteroids: %d/%d", rendered_asteroids, sim->numBodies - 9),
+        WINDOW_WIDTH * 0.03, WINDOW_HEIGHT * 0.11, 16, RAYWHITE);
+    DrawText(TextFormat("LOD Multiplier: %.2f", lodMultiplier),
+        WINDOW_WIDTH * 0.03, WINDOW_HEIGHT * 0.14, 16, RAYWHITE);
+    DrawText("Controls: +(E)/-(X) adjust LOD, R reset",
+        WINDOW_WIDTH * 0.03, WINDOW_HEIGHT * 0.17, 14, GRAY);
 
     EndDrawing();
 }
