@@ -109,7 +109,26 @@ OrbitalSim *constructOrbitalSim(float timeStep){
     //            sim->bodies[i].velocity.y,
     //            sim->bodies[i].velocity.z);
     }
+    /*for (i = 0; i < ALPHACENTAURISYSTEM_BODYNUM; i++) {
+        sim->bodies[i].mass = solarSystem[i].mass;
+        sim->bodies[i].radius = RADIUS_SCALE(solarSystem[i].radius);
 
+        sim->bodies[i].position = Vector3Scale(solarSystem[i].position, SCALE_FACTOR);
+        sim->bodies[i].velocity = Vector3Scale(solarSystem[i].velocity, SCALE_FACTOR);
+
+        sim->bodies[i].color = solarSystem[i].color;
+
+        //     printf("Body %d: Mass = %f, Radius = %f, Position = %f, %f, %f, Velocity = %f, %f, %f\n",
+        //            i,
+        //            sim->bodies[i].mass,
+        //            sim->bodies[i].radius,
+        //            sim->bodies[i].position.x,
+        //            sim->bodies[i].position.y,
+        //            sim->bodies[i].position.z,
+        //            sim->bodies[i].velocity.x,
+        //            sim->bodies[i].velocity.y,
+        //            sim->bodies[i].velocity.z);
+    }*/
     /*for (j = 0; j < ALPHACENTAURISYSTEM_BODYNUM; j++) {
         sim->bodies[j].mass = alphaCentauriSystem[j].mass;
         sim->bodies[j].radius = RADIUS_SCALE(alphaCentauriSystem[j].radius);

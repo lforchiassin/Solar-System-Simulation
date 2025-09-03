@@ -188,8 +188,8 @@ void renderView(View* view, OrbitalSim* sim) {
         }
     }
 
-    // 🚀 Dibujar nave CON ROTACIÓN (si está inicializada)
-    // 🚀 Dibujar nave CON ROTACIÓN Y PIVOT PERSONALIZADO
+    //Dibujar nave CON ROTACIÓN (si está inicializada)
+    //Dibujar nave CON ROTACIÓN Y PIVOT PERSONALIZADO
     if (shipPtr != nullptr) {
         // Definir el offset del pivot (relativo al centro del modelo)
         Vector3 pivotOffset = { 0.0f, -2.0f, -1.5f }; // Por ejemplo, rotar desde 2 unidades abajo
