@@ -6,11 +6,16 @@
  */
 
 #include <time.h>
-
+#include <stdio.h>
 #include "view.h"
 
 #define WINDOW_WIDTH 1280
 #define WINDOW_HEIGHT 720
+
+Model ship;
+Vector3 shipPos = { 0.0f, 0.0f, 1.0f }; // posición inicial de la nave
+
+
 
 /**
  * @brief Converts a timestamp (number of seconds since 1/1/2022)
@@ -41,21 +46,62 @@ const char *getISODate(float timestamp){
  * @return The view
  */
 
-View *constructView(int fps){
-    View *view = new View();
+View* constructView(int fps) {
+    View* view = new View();
 
     InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "EDA Orbital Simulation");
     SetTargetFPS(fps);
     DisableCursor();
 
-    view->camera.position = {10.0f, 10.0f, 10.0f};
-    view->camera.target = {0.0f, 0.0f, 0.0f};
-    view->camera.up = {0.0f, 1.0f, 0.0f};
+    view->camera.position = { 10.0f, 10.0f, 10.0f };
+    view->camera.target = { 0.0f, 0.0f, 0.0f };
+    view->camera.up = { 0.0f, 1.0f, 0.0f };
     view->camera.fovy = 45.0f;
     view->camera.projection = CAMERA_PERSPECTIVE;
 
+    // 🚀 Cargar modelo de la nave
+    ship = LoadModel("assets/ship.obj");
+
+    printf("Material count: %d\n", ship.materialCount);
+
+    // ASIGNAR COLORES SEGÚN LOS MATERIALES DEL MTL
+    for (int i = 0; i < ship.materialCount; i++) {
+        // Configurar cada material basado en el nombre o índice
+        if (i == 0) { // default (primer material)
+            ship.materials[i].maps[MATERIAL_MAP_DIFFUSE].color = WHITE;    // Naranja (Kd 1 0.501961 0)
+        }
+        else if (i == 1) { // default_propulsion
+            ship.materials[i].maps[MATERIAL_MAP_DIFFUSE].color = ORANGE;    // Cian (Kd 0 1 1)
+        }
+        else if (i == 2) { // default_windows
+            ship.materials[i].maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
+            ship.materials[i].maps[MATERIAL_MAP_DIFFUSE].color = ORANGE;    // Azul transparente
+        }
+        else if (i == 3) { // default_saucer
+            ship.materials[i].maps[MATERIAL_MAP_DIFFUSE].color = { 255, 255, 255, 255 };  // Blanco (Kd 1 1 1)
+        }
+        else if (i == 4) { // default_interiors
+            ship.materials[i].maps[MATERIAL_MAP_DIFFUSE].color = { 200, 150, 100, 255 };  // Marrón claro
+        }
+        else {
+            // Para cualquier material adicional
+            ship.materials[i].maps[MATERIAL_MAP_DIFFUSE].color = { 255, 0, 255, 255 };    // Magenta (error)
+        }
+    }
+
+    printf("✅ Nave cargada con %d meshes y %d materiales\n", ship.meshCount, ship.materialCount);
+
+    // Debug: mostrar información de materiales
+    for (int i = 0; i < ship.materialCount; i++) {
+        Color diffuseColor = ship.materials[i].maps[MATERIAL_MAP_DIFFUSE].color;
+        printf("Material %d: Color (%d, %d, %d, %d)\n",
+            i, diffuseColor.r, diffuseColor.g, diffuseColor.b, diffuseColor.a);
+    }
+
     return view;
 }
+
+
 
 /**
  * @brief Destroys an orbital simulation view
@@ -65,7 +111,7 @@ View *constructView(int fps){
 
 void destroyView(View *view){
     CloseWindow();
-
+    UnloadModel(ship);
     delete view;
 }
 
@@ -95,7 +141,7 @@ void renderView(View *view, OrbitalSim *sim){
 
     ClearBackground(BLACK);
     BeginMode3D(view->camera);
-
+    
 
     for (int i = 0; i < sim->numBodies; i++) {
         OrbitalBody &body = sim->bodies[i];
@@ -111,6 +157,8 @@ void renderView(View *view, OrbitalSim *sim){
         //DrawPoint3D(body.position, body.color);
     }
 
+    // 🚀 Dibujar nave
+    DrawModel(ship, shipPos, 0.01f, WHITE);
     DrawGrid(10, 10.0f);
     EndMode3D();
 
@@ -119,5 +167,7 @@ void renderView(View *view, OrbitalSim *sim){
     DrawText(getISODate(timestamp), WINDOW_WIDTH * 0.03, WINDOW_HEIGHT * 0.03, 20, RAYWHITE);
     DrawFPS(WINDOW_WIDTH * 0.03, WINDOW_HEIGHT * (1 - 0.05));
 
+    
     EndDrawing();
 }
+

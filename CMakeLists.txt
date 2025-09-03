@@ -30,3 +30,12 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 elseif (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     target_link_libraries(orbitalsim PRIVATE m ${CMAKE_DL_LIBS} pthread GL rt X11)
 endif()
+
+# --------------------------------------------------------------------
+# Copiar carpeta assets a la carpeta de ejecución después de compilar
+# --------------------------------------------------------------------
+add_custom_command(
+    TARGET orbitalsim POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_SOURCE_DIR}/assets $<TARGET_FILE_DIR:orbitalsim>/assets
+)
