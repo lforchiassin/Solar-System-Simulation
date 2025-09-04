@@ -17,9 +17,23 @@ struct OrbitalBody{
     // Fill in your code here...
     Vector3 position;
     Vector3 velocity;
-    float mass;
-	float radius;
+    double mass;
+    double radius;
 	CLITERAL(Color) color;
+    bool isAlive;
+};
+
+/**
+ * @brief Black hole definition
+ */
+struct BlackHole {
+    Vector3 position;
+    Vector3 velocity;
+    double mass;
+    double radius;
+    double eventHorizonRadius;
+    bool isActive;
+    double growthRate; // Qué tan rápido crece cuando consume materia
 };
 
 /**
@@ -32,12 +46,13 @@ struct OrbitalSim{
    OrbitalBody *bodies; // Array of orbital bodies
    int numBodies; // Number of orbital bodies
    float centerRadius; // Radius of the most massive object in the star system
-   float scaledG;
-
+   BlackHole blackHole; // El agujero negro
+   int aliveBodies; // Contador de cuerpos vivos
 };
 
 OrbitalSim *constructOrbitalSim(float timeStep);
 void destroyOrbitalSim(OrbitalSim *sim);
 void updateOrbitalSim(OrbitalSim *sim);
+void createBlackHole(OrbitalSim* sim, Vector3 position);
 
 #endif

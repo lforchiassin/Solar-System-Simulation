@@ -9,8 +9,8 @@
 #define ORBITALSIMVIEW_H
 
 #include <raylib.h>
-
 #include "orbitalSim.h"
+#define UPDATEPERFRAME 10
 
 /**
  * The view data

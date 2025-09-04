@@ -110,9 +110,16 @@ bool isViewRendering(View* view) {
 
 void renderView(View* view, OrbitalSim* sim) {
     static float lodMultiplier = 1.0f;
-    if (IsKeyPressed(KEY_E)) lodMultiplier *= 1.2f;     // + para ver más asteroides
-    if (IsKeyPressed(KEY_X)) lodMultiplier *= 0.8f;     // - para ver menos asteroides
+    if (IsKeyPressed(KEY_ONE)) lodMultiplier *= 1.2f;     // + para ver más asteroides
+    if (IsKeyPressed(KEY_TWO)) lodMultiplier *= 0.8f;     // - para ver menos asteroides
     if (IsKeyPressed(KEY_R)) lodMultiplier = 1.0f;      // R para resetear
+
+    if (IsKeyPressed(KEY_K) && !sim->blackHole.isActive) {
+        // Crear agujero negro en la posición de la cámara
+        Vector3 blackHolePos = Vector3Scale(view->camera.position, 1.0f / SCALE_FACTOR);
+        blackHolePos.y = 0;
+        createBlackHole(sim, blackHolePos);
+    }
 
     // Para la rotación y posición de la nave
     static float shipRotationAngle = 0.0f;
@@ -199,6 +206,7 @@ void renderView(View* view, OrbitalSim* sim) {
 
     for (int i = 0; i < sim->numBodies; i++) {
         OrbitalBody& body = sim->bodies[i];
+		if (!body.isAlive) continue; // Solo renderizar cuerpos vivos
         Vector3 scaledPosition = Vector3Scale(body.position, SCALE_FACTOR);
         float distance = Vector3Distance(view->camera.position, scaledPosition);
 
@@ -277,6 +285,179 @@ void renderView(View* view, OrbitalSim* sim) {
         }
     }
 
+    static float accretionRotation = 0.0f;
+    static float gravitationalLensingEffect = 0.0f;
+    static float hawkingRadiationPulse = 0.0f;
+    static Shader accretionShader; // Necesitarás crear un shader personalizado
+    static bool shaderLoaded = false;
+
+    if (sim->blackHole.isActive) {
+    // Mejoras para renderizar un agujero negro más realista
+
+        Vector3 blackHoleScaledPos = Vector3Scale(sim->blackHole.position, SCALE_FACTOR);
+        double blackHoleScaledRadius = RADIUS_SCALE(sim->blackHole.radius) * 2;                    // Para que se aprecie en la simulacion
+        double eventHorizonScaledRadius = RADIUS_SCALE(sim->blackHole.radius) * 2;
+
+        // Actualizar animaciones
+        accretionRotation += 90.0f * GetFrameTime();
+        gravitationalLensingEffect = sinf(GetTime() * 0.5f) * 0.3f + 0.7f;
+        hawkingRadiationPulse = sinf(GetTime() * 2.0f) * 0.5f + 0.5f;
+
+        float cameraDistance = Vector3Distance(view->camera.position, blackHoleScaledPos);
+
+        // 1. DISCO DE ACRECIÓN REALISTA
+        // Múltiples capas con diferentes velocidades y colores
+        for (int layer = 0; layer < 5; layer++) {
+            float layerRadius = eventHorizonScaledRadius * (2.0f + layer * 0.8f);
+            float layerSpeed = 180.0f / (1.0f + layer * 0.3f); // Velocidad decrece con la distancia
+            float currentRotation = accretionRotation * layerSpeed / 90.0f;
+
+            // Color basado en temperatura (más caliente = más cerca)
+            Color layerColor;
+            if (layer == 0) layerColor = { 255, 255, 255, 200 }; // Blanco caliente
+            else if (layer == 1) layerColor = { 255, 200, 100, 180 }; // Amarillo
+            else if (layer == 2) layerColor = { 255, 150, 50, 160 }; // Naranja
+            else if (layer == 3) layerColor = { 255, 100, 0, 140 }; // Rojo
+            else layerColor = { 150, 50, 0, 120 }; // Rojo oscuro
+
+            // Dibujar partículas en espiral
+            int particleCount = 64 / (layer + 1); // Menos partículas en capas externas
+            for (int i = 0; i < particleCount; i++) {
+                float angle = (currentRotation + i * 360.0f / particleCount) * DEG2RAD;
+
+                // Espiral logarítmica para simular acreción
+                float spiralOffset = sinf(GetTime() + i * 0.1f) * 0.1f;
+                float actualRadius = layerRadius * (1.0f + spiralOffset);
+
+                Vector3 particlePos = {
+                    blackHoleScaledPos.x + actualRadius * cosf(angle),
+                    blackHoleScaledPos.y + sinf(angle * 3.0f + GetTime()) * actualRadius * 0.1f,
+                    blackHoleScaledPos.z + actualRadius * sinf(angle)
+                };
+
+                // Tamaño de partícula basado en distancia a la cámara
+                float particleSize = 0.05f / (cameraDistance / layerRadius + 0.1f);
+                DrawSphere(particlePos, particleSize, layerColor);
+
+                // Jets polares (solo en la primera capa)
+                if (layer == 0 && i % 8 == 0) {
+                    Vector3 jetPos = {
+                        blackHoleScaledPos.x,
+                        blackHoleScaledPos.y + eventHorizonScaledRadius * 3.0f * sinf(GetTime() + i),
+                        blackHoleScaledPos.z
+                    };
+                    DrawLine3D(blackHoleScaledPos, jetPos, { 100, 150, 255, 100 });
+                }
+            }
+        }
+
+        // 2. LENTE GRAVITACIONAL SIMULADO
+        // Dibujar anillos de distorsión alrededor del horizonte de eventos
+        for (int ring = 0; ring < 3; ring++) {
+            float ringRadius = eventHorizonScaledRadius * (1.2f + ring * 0.1f);
+            Color distortionColor = { 50, 0, 100, (unsigned char)(50 * gravitationalLensingEffect) };
+
+            for (int i = 0; i < 32; i++) {
+                float angle = i * 360.0f / 32 * DEG2RAD;
+                // Distorsión ondulante
+                float distortion = sinf(angle * 4.0f + GetTime() * 2.0f) * 0.1f;
+                float actualRadius = ringRadius * (1.0f + distortion);
+
+                Vector3 ringPoint = {
+                    blackHoleScaledPos.x + actualRadius * cosf(angle),
+                    blackHoleScaledPos.y,
+                    blackHoleScaledPos.z + actualRadius * sinf(angle)
+                };
+                DrawPoint3D(ringPoint, distortionColor);
+            }
+        }
+
+        // 3. RADIACIÓN DE HAWKING (partículas virtuales)
+        Color hawkingColor = { 255, 255, 255, (unsigned char)(30 * hawkingRadiationPulse) };
+        for (int i = 0; i < 16; i++) {
+            float angle = (i * 360.0f / 16 + GetTime() * 30.0f) * DEG2RAD;
+            float radius = eventHorizonScaledRadius * (1.05f + sinf(GetTime() * 5.0f + i) * 0.02f);
+
+            Vector3 hawkingPos = {
+                blackHoleScaledPos.x + radius * cosf(angle),
+                blackHoleScaledPos.y + sinf(GetTime() * 3.0f + i) * radius * 0.1f,
+                blackHoleScaledPos.z + radius * sinf(angle)
+            };
+            DrawPoint3D(hawkingPos, hawkingColor);
+        }
+
+        // 4. HORIZONTE DE EVENTOS MEJORADO
+        // Efecto de "absorción de luz" - múltiples capas con transparencia
+        for (int layer = 0; layer < 3; layer++) {
+            float layerRadius = eventHorizonScaledRadius * (1.0f - layer * 0.05f);
+            Color horizonColor = { 0, 0, 0, (unsigned char)(255 - layer * 50) };
+            DrawSphere(blackHoleScaledPos, layerRadius, horizonColor);
+        }
+
+        // 5. ERGOSFERA (para agujeros negros en rotación)
+        float ergosphereRadius = eventHorizonScaledRadius * 1.15f;
+        Color ergosphereColor = { 100, 0, 50, 30 };
+
+        // Dibujar ergosfera como superficie ondulante
+        for (int i = 0; i < 64; i++) {
+            float angle = i * 360.0f / 64 * DEG2RAD;
+            float wave = sinf(angle * 6.0f + GetTime() * 4.0f) * 0.05f;
+            float radius = ergosphereRadius * (1.0f + wave);
+
+            Vector3 ergoPoint = {
+                blackHoleScaledPos.x + radius * cosf(angle),
+                blackHoleScaledPos.y,
+                blackHoleScaledPos.z + radius * sinf(angle)
+            };
+            DrawPoint3D(ergoPoint, ergosphereColor);
+        }
+
+        // 6. EFECTOS DE DISTORSIÓN TEMPORAL
+        // Dibujar ondas gravitacionales si hay movimiento
+        static Vector3 lastBlackHolePos = blackHoleScaledPos;
+        Vector3 velocity = Vector3Subtract(blackHoleScaledPos, lastBlackHolePos);
+        float speed = Vector3Length(velocity);
+
+        if (speed > 0.001f) {
+            for (int wave = 0; wave < 3; wave++) {
+                float waveRadius = eventHorizonScaledRadius * (5.0f + wave * 2.0f + GetTime() * 2.0f);
+                Color waveColor = { 150, 100, 200, (unsigned char)(20 - wave * 5) };
+
+                for (int i = 0; i < 24; i++) {
+                    float angle = i * 360.0f / 24 * DEG2RAD;
+                    Vector3 wavePoint = {
+                        blackHoleScaledPos.x + waveRadius * cosf(angle),
+                        blackHoleScaledPos.y,
+                        blackHoleScaledPos.z + waveRadius * sinf(angle)
+                    };
+                    DrawPoint3D(wavePoint, waveColor);
+                }
+            }
+        }
+        lastBlackHolePos = blackHoleScaledPos;
+
+        // 7. EFECTOS DE LUZ Y SOMBRAS
+        // Simular el "shadow" del agujero negro
+        float shadowRadius = eventHorizonScaledRadius * 2.5f; // Radio de la sombra
+        Vector3 lightDirection = Vector3Normalize(Vector3Subtract(view->camera.position, blackHoleScaledPos));
+
+        // Dibujar círculo de sombra proyectada
+        for (int i = 0; i < 48; i++) {
+            float angle = i * 360.0f / 48 * DEG2RAD;
+            Vector3 shadowEdge = {
+                blackHoleScaledPos.x + shadowRadius * cosf(angle),
+                blackHoleScaledPos.y,
+                blackHoleScaledPos.z + shadowRadius * sinf(angle)
+            };
+
+            // Solo dibujar si está en el lado opuesto a la cámara
+            Vector3 toEdge = Vector3Normalize(Vector3Subtract(shadowEdge, blackHoleScaledPos));
+            if (Vector3DotProduct(toEdge, lightDirection) < 0) {
+                DrawPoint3D(shadowEdge, { 50, 0, 50, 100 });
+            }
+        }
+    }
+
     //Dibujar nave CON ROTACIÓN (si está inicializada)
     //Dibujar nave CON ROTACIÓN Y PIVOT PERSONALIZADO
     if (shipPtr != nullptr) {
@@ -303,7 +484,7 @@ void renderView(View* view, OrbitalSim* sim) {
     EndMode3D();
 
     static float timestamp = 0.0f;
-    timestamp += sim->timeStep;
+    timestamp += sim->timeStep * UPDATEPERFRAME;
     DrawText(getISODate(timestamp), WINDOW_WIDTH * 0.03, WINDOW_HEIGHT * 0.03, 20, RAYWHITE);
     DrawFPS(WINDOW_WIDTH * 0.03, WINDOW_HEIGHT * (1 - 0.05));
     DrawText(TextFormat("Planets: %d/9", rendered_planets),
