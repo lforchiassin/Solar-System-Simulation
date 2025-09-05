@@ -4,7 +4,9 @@
 
 * [Nombre]: [contribución]
 
-[completar]
+Dylan Frigerio: Implementación del sistema solar, agujero negro, asteroides, interfaz y menú. Optimización del código y mejora de la complejidad computacional de las funciones.
+
+Luca Forchiassin: Implementación de Alphacentaury y de la nave espacial. Optimización del código y mejora de la complejidad computacional de las funciones.
 
 ## Verificación del timestep
 

@@ -78,18 +78,17 @@ static MenuState menuState = {
     0.0f                     // cursorBlinkTimer
 };
 
-// Agregar esta estructura al inicio del archivo, después de las definiciones de colores
 typedef struct {
     Model model;
     bool isLoaded;
-    Vector3 localRotation;     // Rotación local de la nave
+    Vector3 localRotation;     // local spaceship rotation
     Vector3 scale;
-    Vector3 relativePosition;  // Posición relativa a la cámara
+	Vector3 relativePosition;  // relative position to camera
     float rotationSpeed;
     bool isInitialized;
 } ShipRenderer;
 
-// Variable global para el ship renderer
+// global ship renderer instance
 static ShipRenderer shipRenderer = { 0 };
 
 // Forward declarations for UI functions
@@ -156,7 +155,7 @@ View* constructView(int fps) {
  * @brief Destroys an orbital simulation view
  */
 void destroyView(View* view) {
-    CleanupShip();  // AGREGAR ESTA LÍNEA
+    CleanupShip();  
     CloseWindow();
     delete view;
 }
@@ -188,7 +187,7 @@ void renderView(View* view, OrbitalSim* sim, int reset) {
     menuState.animationTime += GetFrameTime();
     menuState.cursorBlinkTimer += GetFrameTime();
 
-    // Actualizar timer del diálogo de confirmación
+	// Update simulation timestamp
     if (menuState.showConfirmReset) {
         menuState.confirmDialogTimer += GetFrameTime();
     }
@@ -216,7 +215,7 @@ void renderView(View* view, OrbitalSim* sim, int reset) {
         }
     }
 
-    // Inicializar y actualizar la nave
+	// initialize and update ship
     InitializeShip();
     UpdateShipRotation(GetFrameTime());
 
@@ -314,7 +313,7 @@ void renderView(View* view, OrbitalSim* sim, int reset) {
         DrawSphere(blackHoleScaledPos, eventHorizonScaledRadius, BLACK);
     }
 
-    // Renderizar la nave con el nuevo sistema modular
+	// spaceship rendering
     RenderShip(&view->camera);
 
     DrawGrid(10, 10.0f);
@@ -422,23 +421,23 @@ static void HandleTextInput(void) {
 }
 
 /**
- * @brief Inicializa el renderizador de la nave
+ * @brief Inicialize the ship model and settings
  */
 static void InitializeShip(void) {
     if (shipRenderer.isInitialized) return;
 
-    // Cargar el modelo
+    // Loading space model
     shipRenderer.model = LoadModel("assets/UFO.obj");
     shipRenderer.isLoaded = IsModelValid(shipRenderer.model);
 
     if (shipRenderer.isLoaded) {
-        // Configurar materiales y texturas
+		// Setting material properties
         for (int i = 0; i < shipRenderer.model.materialCount; i++) {
-            // Configurar propiedades del material para evitar transparencias no deseadas
+           
             shipRenderer.model.materials[i].maps[MATERIAL_MAP_DIFFUSE].color = (i == 1) ? BLUE : WHITE;
 
-            // Habilitar culling para evitar ver a través del modelo
-            shipRenderer.model.materials[i].shader = LoadShader(NULL, NULL); // Shader por defecto
+            
+            shipRenderer.model.materials[i].shader = LoadShader(NULL, NULL); 
         }
         if (shipRenderer.isLoaded) {
             printf("✅ Modelo cargado correctamente\n");
@@ -448,7 +447,6 @@ static void InitializeShip(void) {
             printf("   Verifica que el archivo existe en: assets/ship.obj\n");
         }
 
-        // Generar mesh tangents si no existen (mejora el renderizado)
         for (int i = 0; i < shipRenderer.model.meshCount; i++) {
             if (shipRenderer.model.meshes[i].tangents == NULL) {
                 GenMeshTangents(&shipRenderer.model.meshes[i]);
@@ -456,39 +454,39 @@ static void InitializeShip(void) {
         }
     }
 
-    // Configuración inicial
+    // Initial settings
     shipRenderer.localRotation = Vector3{ 0.0f, 0.0f, 0.0f };
-    shipRenderer.scale = Vector3{ 0.008f, 0.008f, 0.008f };  // Más pequeña
-    shipRenderer.relativePosition = Vector3{ 8.0f, -1.5f, -3.0f }; // Más alejada y centrada
-    shipRenderer.rotationSpeed = 45.0f; // Grados por segundo - más lenta
+    shipRenderer.scale = Vector3{ 0.008f, 0.008f, 0.008f };  
+    shipRenderer.relativePosition = Vector3{ 8.0f, -1.5f, -3.0f }; 
+    shipRenderer.rotationSpeed = 45.0f; 
     shipRenderer.isInitialized = true;
 }
 
 /**
- * @brief Actualiza la rotación local de la nave
+ * @brief Updates the ship's rotation over time
  */
 static void UpdateShipRotation(float deltaTime) {
     if (!shipRenderer.isInitialized || !shipRenderer.isLoaded) return;
 
-    // Rotación solo en el eje Y (yaw) para que gire sobre sí misma
+	// Rotation around local Y axis
     shipRenderer.localRotation.y += shipRenderer.rotationSpeed * deltaTime;
 
-    // Mantener el ángulo en el rango 0-360
+	// Keep angle within 0-360 degrees
     if (shipRenderer.localRotation.y >= 360.0f) {
         shipRenderer.localRotation.y -= 360.0f;
     }
 }
 
 /**
- * @brief Calcula la posición mundial de la nave relativa a la cámara
+ * @brief Calculates the ship's world position based on camera orientation
  */
 static Vector3 CalculateShipWorldPosition(Camera3D* camera) {
-    // Calcular vectores de la cámara
+	// Calculate camera basis vectors
     Vector3 forward = Vector3Normalize(Vector3Subtract(camera->target, camera->position));
     Vector3 right = Vector3Normalize(Vector3CrossProduct(forward, camera->up));
     Vector3 up = Vector3Normalize(Vector3CrossProduct(right, forward));
 
-    // Calcular posición mundial basada en la posición relativa
+    // Calculate world position
     Vector3 worldPos = camera->position;
     worldPos = Vector3Add(worldPos, Vector3Scale(forward, shipRenderer.relativePosition.x));
     worldPos = Vector3Add(worldPos, Vector3Scale(right, shipRenderer.relativePosition.z));
@@ -498,16 +496,14 @@ static Vector3 CalculateShipWorldPosition(Camera3D* camera) {
 }
 
 /**
- * @brief Renderiza la nave en la posición calculada
+ * @brief renders the ship model
  */
 static void RenderShip(Camera3D* camera) {
     if (!shipRenderer.isInitialized || !shipRenderer.isLoaded) return;
 
     Vector3 worldPosition = CalculateShipWorldPosition(camera);
-
-    // Usar DrawModelEx con los parámetros correctos
-    Vector3 rotationAxis = { 0.0f, 1.0f, 0.0f }; // Eje Y para rotación local
-    float rotationAngle = shipRenderer.localRotation.y; // Solo rotación Y
+	Vector3 rotationAxis = { 0.0f, 1.0f, 0.0f }; // Y axis for local rotation
+    float rotationAngle = shipRenderer.localRotation.y; 
 
     DrawModelEx(
         shipRenderer.model,
@@ -520,7 +516,7 @@ static void RenderShip(Camera3D* camera) {
 }
 
 /**
- * @brief Limpia los recursos de la nave
+ * @brief Cleans up ship resources
  */
 static void CleanupShip(void) {
     if (shipRenderer.isLoaded) {
@@ -720,7 +716,7 @@ static void DrawMainMenu(OrbitalSim* sim) {
     }
 
     if (resetPressed || menuState.showConfirmReset) {
-        // Si acabamos de presionar reset, inicializar el timer
+		// Inicialize timer if just pressed reset
         if (resetPressed && !menuState.showConfirmReset) {
             menuState.showConfirmReset = true;
             menuState.confirmDialogTimer = 0.0f;  // Resetear el timer
@@ -736,20 +732,20 @@ static void DrawMainMenu(OrbitalSim* sim) {
         Rectangle yesBtn = { confirmPanel.x + 80, confirmPanel.y + 90, 80, 35 };
         Rectangle noBtn = { confirmPanel.x + 200, confirmPanel.y + 90, 80, 35 };
 
-        // Solo permitir clicks después de 0.3 segundos
+		// Only allow clicking after 0.3 seconds
         bool canClick = menuState.confirmDialogTimer > 0.3f;
 
         bool yesPressed = canClick && IsMouseInside(yesBtn) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
         bool noPressed = canClick && IsMouseInside(noBtn) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
 
-        // Cambiar el color de los botones si no se pueden clickear aún
+		// Change button color based on clickability
         Color yesColor = canClick ? UI_SECONDARY_COLOR : ColorAlpha(UI_SECONDARY_COLOR, 0.5f);
         Color noColor = canClick ? UI_SECONDARY_COLOR : ColorAlpha(UI_SECONDARY_COLOR, 0.5f);
 
         DrawButton(yesBtn, "YES", yesPressed, yesColor);
         DrawButton(noBtn, "NO", noPressed, noColor);
 
-        // Mostrar countdown si aún no se puede clickear
+		// Show countdown if not clickable yet
         if (!canClick) {
             int countdown = (int)((0.3f - menuState.confirmDialogTimer) * 10) + 1;
             DrawText(TextFormat("Wait %d...", countdown), confirmPanel.x + 180, confirmPanel.y + 130, 12, UI_TEXT_SECONDARY);
@@ -760,7 +756,7 @@ static void DrawMainMenu(OrbitalSim* sim) {
             menuState.isOpen = false;
             menuState.showConfirmReset = false;
             menuState.asteroidInputActive = false;
-            menuState.confirmDialogTimer = 0.0f;  // Resetear timer
+            menuState.confirmDialogTimer = 0.0f;  // Reset timer
             renderView(0, sim, 1); // Reset timestamp
             DisableCursor();
         }

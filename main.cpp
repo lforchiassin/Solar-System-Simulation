@@ -27,7 +27,7 @@ int main() {
     View* view = constructView(fps);
 
     while (isViewRendering(view)) {
-        for (int i = 0; i < UPDATEPERFRAME; i++) // Acelera la simulación
+        for (int i = 0; i < UPDATEPERFRAME; i++) // Accelerates simulation 
             updateOrbitalSim(sim);
         renderView(view, sim, 0);
     }
