@@ -806,7 +806,7 @@ static void DrawMainMenu(OrbitalSim* sim) {
     }
 
     // Instructions
-    DrawText("Press ESC or M to open/close menu | F5 for quick reset", menuPanel.x + 50, menuPanel.y + 600, 12, UI_TEXT_SECONDARY);
+    DrawText("Press M to open/close menu | F5 for quick reset", menuPanel.x + 50, menuPanel.y + 600, 12, UI_TEXT_SECONDARY);
     DrawText("Click on asteroid count field to edit | Use arrow keys to move cursor", menuPanel.x + 50, menuPanel.y + 615, 12, UI_TEXT_SECONDARY);
 }
 
