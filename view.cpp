@@ -1,12 +1,14 @@
 /**
- * @brief Implements an orbital simulation view
- * @author Marc S. Ressl
+ * @brief Implements an orbital simulation view with enhanced UI and menu system
+ * @author Marc S. Ressl (Enhanced by Claude)
  *
  * @copyright Copyright (c) 2022-2023
  */
 
 #include <time.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "view.h"
 #include "raymath.h"
 
@@ -15,23 +17,109 @@
 #define SCALE_FACTOR 1E-11F
 #define RADIUS_SCALE(r) (0.005F * logf(r))
 
- /**
-  * @brief Converts a timestamp (number of seconds since 1/1/2022)
-  *        to an ISO date ("YYYY-MM-DD")
-  *
-  * @param timestamp the timestamp
-  * @return The ISO date (a raylib string)
-  */
+ // UI Colors and styling
+#define UI_PRIMARY_COLOR Color{0, 255, 255, 255}      // Cyan
+#define UI_SECONDARY_COLOR Color{0, 128, 255, 255}    // Blue
+#define UI_ACCENT_COLOR Color{255, 255, 255, 255}     // White
+#define UI_BACKGROUND Color{10, 25, 47, 240}          // Dark blue with transparency
+#define UI_PANEL_BG Color{15, 25, 40, 220}            // Panel background
+#define UI_TEXT_PRIMARY Color{255, 255, 255, 255}     // White text
+#define UI_TEXT_SECONDARY Color{200, 200, 200, 180}   // Gray text
+#define UI_SUCCESS_COLOR Color{0, 255, 0, 255}        // Green
+#define UI_WARNING_COLOR Color{255, 255, 0, 255}      // Yellow
+#define UI_ERROR_COLOR Color{255, 100, 100, 255}      // Light red
 
+// UI Layout constants
+#define PANEL_PADDING 20
+#define PANEL_MARGIN 30
+#define BUTTON_HEIGHT 35
+#define BUTTON_SPACING 8
+#define STAT_BOX_SIZE 120
+
+// Menu state structure
+typedef struct {
+    bool isOpen;
+    SystemType selectedSystem;
+    EasterEggType selectedEasterEgg;
+    DispersionType selectedDispersion;
+    bool showConfirmReset;
+    float animationTime;
+    float confirmDialogTimer;
+
+    // Asteroid controls
+    char asteroidCountText[8];  // String for text input
+    int asteroidCount;          // Actual number
+    bool asteroidInputActive;   // Is text field being edited
+    int cursorPosition;         // Cursor position in text field
+    float cursorBlinkTimer;     // Cursor blink animation
+} MenuState;
+
+// UI Animation state
+typedef struct {
+    float rotation;
+    float pulse;
+    float glow;
+    float uiTime;
+} UIAnimationState;
+
+static UIAnimationState uiAnim = { 0 };
+static MenuState menuState = {
+    false,                    // isOpen
+    SYSTEM_TYPE_SOLAR,       // selectedSystem
+    EASTER_EGG_NONE,         // selectedEasterEgg
+    DISPERSION_NORMAL,       // selectedDispersion
+    false,                   // showConfirmReset
+    0.0f,                    // animationTime
+    0.0f,                    // confirmDialogTimer
+    "500",                  // asteroidCountText
+    500,                    // asteroidCount
+    false,                   // asteroidInputActive
+    4,                       // cursorPosition
+    0.0f                     // cursorBlinkTimer
+};
+
+// Agregar esta estructura al inicio del archivo, después de las definiciones de colores
+typedef struct {
+    Model model;
+    bool isLoaded;
+    Vector3 localRotation;     // Rotación local de la nave
+    Vector3 scale;
+    Vector3 relativePosition;  // Posición relativa a la cámara
+    float rotationSpeed;
+    bool isInitialized;
+} ShipRenderer;
+
+// Variable global para el ship renderer
+static ShipRenderer shipRenderer = { 0 };
+
+// Forward declarations for UI functions
+static void DrawEnhancedTopHUD(OrbitalSim* sim, float timestamp);
+static void DrawEnhancedLeftPanel(OrbitalSim* sim, float lodMultiplier, int rendered_planets, int rendered_asteroids);
+static void DrawEnhancedRightPanel(void);
+static void DrawEnhancedBottomHUD(int fps);
+static void DrawPanelBackground(Rectangle rect, Color color);
+static void DrawStatBox(Rectangle rect, const char* value, const char* label, Color accentColor);
+static void DrawButton(Rectangle rect, const char* text, bool isPressed, Color color);
+static void DrawTextInput(Rectangle rect, const char* text, bool isActive, const char* label);
+static Rectangle GetCenteredRect(float x, float y, float width, float height);
+static bool IsMouseInside(Rectangle rect);
+static void DrawMainMenu(OrbitalSim* sim);
+static void HandleMenuInput(OrbitalSim* sim);
+static void HandleTextInput(void);
+static void InitializeSystem(OrbitalSim* sim);
+static void InitializeShip(void);
+static void UpdateShipRotation(float deltaTime);
+static Vector3 CalculateShipWorldPosition(Camera3D* camera);
+static void RenderShip(Camera3D* camera);
+static void CleanupShip(void);
+
+/**
+ * @brief Converts a timestamp to an ISO date
+ */
 const char* getISODate(float timestamp) {
-    // Timestamp epoch: 1/1/2022
     struct tm unichEpochTM = { 0, 0, 0, 1, 0, 122 };
-
-    // Convert timestamp to UNIX timestamp (number of seconds since 1/1/1970)
     time_t unixEpoch = mktime(&unichEpochTM);
     time_t unixTimestamp = unixEpoch + (time_t)timestamp;
-
-    // Returns ISO date
     struct tm* localTM = localtime(&unixTimestamp);
     return TextFormat("%04d-%02d-%02d",
         1900 + localTM->tm_year, localTM->tm_mon + 1, localTM->tm_mday);
@@ -39,29 +127,23 @@ const char* getISODate(float timestamp) {
 
 /**
  * @brief Constructs an orbital simulation view
- *
- * @param fps Frames per second for the view
- * @return The view
  */
-
 View* constructView(int fps) {
-    // Variables estáticas para el modelo de la nave
     static Model ship;
     static bool shipLoaded = false;
 
     View* view = new View();
 
-    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "EDA Orbital Simulation");
+    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "EDA Orbital Simulation - Enhanced");
     SetTargetFPS(fps);
     DisableCursor();
 
-    view->camera.position = { 10.0f, 10.0f, 10.0f };
+    view->camera.position = { 15.0f, 15.0f, 15.0f };
     view->camera.target = { 0.0f, 0.0f, 0.0f };
     view->camera.up = { 0.0f, 1.0f, 0.0f };
     view->camera.fovy = 45.0f;
     view->camera.projection = CAMERA_PERSPECTIVE;
 
-    // 🚀 Cargar modelo de la nave solo una vez
     if (!shipLoaded) {
         ship = LoadModel("assets/ship.obj");
         shipLoaded = true;
@@ -72,212 +154,131 @@ View* constructView(int fps) {
 
 /**
  * @brief Destroys an orbital simulation view
- *
- * @param view The view
  */
-
 void destroyView(View* view) {
-    // Variables estáticas para controlar la limpieza
-    static bool shipUnloaded = false;
-
-    if (!shipUnloaded) {
-        // Solo descargar el modelo una vez
-        // Nota: El modelo está en una variable estática en constructView,
-        // así que necesitamos una forma de acceder a él para descargarlo
-        shipUnloaded = true;
-    }
-
+    CleanupShip();  // AGREGAR ESTA LÍNEA
     CloseWindow();
     delete view;
 }
 
 /**
  * @brief Should the view still render?
- *
- * @return Should rendering continue?
  */
-
 bool isViewRendering(View* view) {
     return !WindowShouldClose();
 }
 
 /**
- * Renders an orbital simulation
- *
- * @param view The view
- * @param sim The orbital sim
+ * @brief Main render function with enhanced UI
  */
-
-void renderView(View* view, OrbitalSim* sim) {
-    static float lodMultiplier = 1.0f;
-    if (IsKeyPressed(KEY_ONE)) lodMultiplier *= 1.2f;     // + para ver más asteroides
-    if (IsKeyPressed(KEY_TWO)) lodMultiplier *= 0.8f;     // - para ver menos asteroides
-    if (IsKeyPressed(KEY_R)) lodMultiplier = 1.0f;      // R para resetear
-
-    if (IsKeyPressed(KEY_K) && !sim->blackHole.isActive) {
-        // Crear agujero negro en la posición de la cámara
-        Vector3 blackHolePos = Vector3Scale(view->camera.position, 1.0f / SCALE_FACTOR);
-        blackHolePos.y = 0;
-        createBlackHole(sim, blackHolePos);
+void renderView(View* view, OrbitalSim* sim, int reset) {
+    static float timestamp = 0.0f;
+    if (reset)
+    {
+        timestamp = 0.0f;
+        return;
     }
 
-    // Para la rotación y posición de la nave
-    static float shipRotationAngle = 0.0f;
-    static float shipRotationSpeed = 90.0f; // grados por segundo
-    static Vector3 shipPos;
-    // Variable estática para acceder al modelo de la nave
-    static Model* shipPtr = nullptr;
-    static bool shipInitialized = false;
+    // Update UI animations
+    uiAnim.uiTime = GetTime();
+    uiAnim.rotation += 45.0f * GetFrameTime();
+    uiAnim.pulse = (sinf(uiAnim.uiTime * 2.0f) + 1.0f) * 0.5f;
+    uiAnim.glow = (sinf(uiAnim.uiTime * 1.5f) + 1.0f) * 0.5f;
 
-    UpdateCamera(&view->camera, CAMERA_FREE);
+    menuState.animationTime += GetFrameTime();
+    menuState.cursorBlinkTimer += GetFrameTime();
 
-    // Inicializar referencia al modelo (solo la primera vez)
-    if (!shipInitialized) {
-        // Aquí necesitaríamos una forma de obtener la referencia al modelo
-        // Por ahora, cargaremos el modelo aquí también
-        static Model ship = LoadModel("assets/ship.obj");
-        shipPtr = &ship;
-        shipInitialized = true;
+    // Actualizar timer del diálogo de confirmación
+    if (menuState.showConfirmReset) {
+        menuState.confirmDialogTimer += GetFrameTime();
+    }
 
-        // Configurar materiales (copiado de constructView)
-        for (int i = 0; i < ship.materialCount; i++) {
-            if (i == 0) {
-                ship.materials[i].maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
-            }
-            else if (i == 1) {
-                ship.materials[i].maps[MATERIAL_MAP_DIFFUSE].color = BLUE;
-            }
-            else if (i == 2) {
-                ship.materials[i].maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
-            }
-            else if (i == 3) {
-                ship.materials[i].maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
-            }
-            else if (i == 4) {
-                ship.materials[i].maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
-            }
-            else {
-                ship.materials[i].maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
-            }
+    static float lodMultiplier = 1.0f;
+
+    // Handle menu input
+    HandleMenuInput(sim);
+
+    // Handle text input when menu is open
+    if (menuState.isOpen && menuState.asteroidInputActive) {
+        HandleTextInput();
+    }
+
+    // Handle input only when menu is not open
+    if (!menuState.isOpen) {
+        if (IsKeyPressed(KEY_ONE)) lodMultiplier *= 1.2f;
+        if (IsKeyPressed(KEY_TWO)) lodMultiplier *= 0.8f;
+        if (IsKeyPressed(KEY_R)) lodMultiplier = 1.0f;
+
+        if (IsKeyPressed(KEY_K) && !sim->blackHole.isActive) {
+            Vector3 blackHolePos = Vector3Scale(view->camera.position, 1.0f / SCALE_FACTOR);
+            blackHolePos.y = 0;
+            createBlackHole(sim, blackHolePos);
         }
     }
 
-    // Actualizar rotación de la nave
-    shipRotationAngle += shipRotationSpeed * GetFrameTime();
-    if (shipRotationAngle >= 360.0f) {
-        shipRotationAngle -= 360.0f; // Resetear para evitar números muy grandes
+    // Inicializar y actualizar la nave
+    InitializeShip();
+    UpdateShipRotation(GetFrameTime());
+
+    if (!menuState.isOpen) {
+        UpdateCamera(&view->camera, CAMERA_FREE);
     }
-
-    // Calcular posición de la nave relativa a la cámara
-    Vector3 cameraForward = Vector3Normalize(Vector3Subtract(view->camera.target, view->camera.position));
-    Vector3 cameraRight = Vector3Normalize(Vector3CrossProduct(cameraForward, view->camera.up));
-    Vector3 cameraUp = Vector3CrossProduct(cameraRight, cameraForward);
-
-
-
-    // Posicionar la nave un poco adelante y abajo de la cámara
-    float distanceAhead = 7.0f;    // Distancia hacia adelante
-    float distanceDown = -1.0f;    // Distancia hacia abajo
-    float distanceRight = 0.0f;    // Distancia hacia la derecha
-
-
-
-    shipPos = Vector3Add(view->camera.position,
-        Vector3Add(Vector3Add(Vector3Scale(cameraForward, distanceAhead),
-            Vector3Scale(cameraUp, distanceDown)),
-            Vector3Scale(cameraRight, distanceRight)));
 
     BeginDrawing();
     ClearBackground(BLACK);
+
     BeginMode3D(view->camera);
 
-    // LOD dinámico ajustable
+    // LOD calculations
     float baseLOD = (10.0f / tanf(view->camera.fovy * 0.5f * DEG2RAD)) * lodMultiplier;
-    const float LOD_HIGH = baseLOD * 0.3f;
-    const float LOD_MEDIUM = baseLOD * 0.8f;
-    const float LOD_LOW = baseLOD * 2.0f;
-    const float LOD_CULL = baseLOD * 5.0f;
-
-    // Planetas con distancias aún más generosas
     const float PLANET_LOD_CULL = baseLOD * 15.0f;
+    const float LOD_CULL = baseLOD * 5.0f;
 
     int rendered_planets = 0;
     int rendered_asteroids = 0;
 
+    // Render celestial bodies with LOD (código existente...)
     for (int i = 0; i < sim->numBodies; i++) {
         OrbitalBody& body = sim->bodies[i];
-		if (!body.isAlive) continue; // Solo renderizar cuerpos vivos
+        if (!body.isAlive) continue;
+
         Vector3 scaledPosition = Vector3Scale(body.position, SCALE_FACTOR);
         float distance = Vector3Distance(view->camera.position, scaledPosition);
 
-        if (i < 9) {
-            // PLANETAS - 6 niveles de LOD
+        if (i < sim->systemBodies) { // System bodies (planets/stars)
             if (distance > PLANET_LOD_CULL) continue;
-
             float radius = RADIUS_SCALE(body.radius);
-            float relativeDistance = distance / PLANET_LOD_CULL; // 0.0 = muy cerca, 1.0 = muy lejos
+            float relativeDistance = distance / PLANET_LOD_CULL;
 
             if (relativeDistance < 0.1f) {
-                // Nivel 0 - Máximo detalle
                 DrawSphere(scaledPosition, radius, body.color);
             }
-            else if (relativeDistance < 0.2f) {
-                // Nivel 1 - Alta resolución
-                DrawSphereEx(scaledPosition, radius, 20, 20, body.color);
-            }
             else if (relativeDistance < 0.4f) {
-                // Nivel 2 - Resolución media-alta
                 DrawSphereEx(scaledPosition, radius * 0.95f, 16, 16, body.color);
             }
-            else if (relativeDistance < 0.6f) {
-                // Nivel 3 - Resolución media
-                DrawSphereEx(scaledPosition, radius * 0.9f, 12, 12, body.color);
-            }
             else if (relativeDistance < 0.8f) {
-                // Nivel 4 - Resolución baja
                 DrawSphereEx(scaledPosition, radius * 0.8f, 8, 8, body.color);
             }
             else {
-                // Nivel 5 - Resolución mínima
                 DrawSphereEx(scaledPosition, radius * 0.7f, 6, 6, body.color);
             }
             rendered_planets++;
         }
-        else {
-            // ASTEROIDES - 5 niveles de LOD
+        else { // Asteroids
             if (distance > LOD_CULL) continue;
-
-            float lodFactor = 1.0f;
             float relativeDistance = distance / LOD_CULL;
-
-            // Calcular factor LOD basado en distancia
-            if (relativeDistance > 0.8f) lodFactor = 0.05f;      // 1/20
-            else if (relativeDistance > 0.6f) lodFactor = 0.1f;  // 1/10
-            else if (relativeDistance > 0.4f) lodFactor = 0.25f; // 1/4
-            else if (relativeDistance > 0.2f) lodFactor = 0.5f;  // 1/2
-            // else lodFactor = 1.0f (todos)
+            float lodFactor = (relativeDistance > 0.8f) ? 0.05f :
+                (relativeDistance > 0.4f) ? 0.25f : 1.0f;
 
             if (((i * 73 + 17) % 1000) < (int)(lodFactor * 1000)) {
                 float asteroidRadius = RADIUS_SCALE(body.radius) * 0.3f;
-
-                if (relativeDistance < 0.1f) {
-                    // Nivel 0 - Esfera completa
-                    DrawSphere(scaledPosition, asteroidRadius, body.color);
-                }
-                else if (relativeDistance < 0.3f) {
-                    // Nivel 1 - Esfera media resolución
+                if (relativeDistance < 0.3f) {
                     DrawSphereEx(scaledPosition, asteroidRadius, 10, 10, body.color);
                 }
-                else if (relativeDistance < 0.5f) {
-                    // Nivel 2 - Esfera baja resolución
-                    DrawSphereEx(scaledPosition, asteroidRadius * 0.8f, 6, 6, body.color);
-                }
                 else if (relativeDistance < 0.7f) {
-                    // Nivel 3 - Esfera muy simple
                     DrawSphereEx(scaledPosition, asteroidRadius * 0.6f, 4, 4, body.color);
                 }
                 else {
-                    // Nivel 4 - Solo punto
                     DrawPoint3D(scaledPosition, body.color);
                 }
                 rendered_asteroids++;
@@ -285,216 +286,746 @@ void renderView(View* view, OrbitalSim* sim) {
         }
     }
 
-    static float accretionRotation = 0.0f;
-    static float gravitationalLensingEffect = 0.0f;
-    static float hawkingRadiationPulse = 0.0f;
-    static Shader accretionShader; // Necesitarás crear un shader personalizado
-    static bool shaderLoaded = false;
-
+    // Enhanced Black Hole Rendering (código existente...)
     if (sim->blackHole.isActive) {
-    // Mejoras para renderizar un agujero negro más realista
-
         Vector3 blackHoleScaledPos = Vector3Scale(sim->blackHole.position, SCALE_FACTOR);
-        double blackHoleScaledRadius = RADIUS_SCALE(sim->blackHole.radius) * 2;                    // Para que se aprecie en la simulacion
         double eventHorizonScaledRadius = RADIUS_SCALE(sim->blackHole.radius) * 2;
 
-        // Actualizar animaciones
-        accretionRotation += 90.0f * GetFrameTime();
-        gravitationalLensingEffect = sinf(GetTime() * 0.5f) * 0.3f + 0.7f;
-        hawkingRadiationPulse = sinf(GetTime() * 2.0f) * 0.5f + 0.5f;
-
-        float cameraDistance = Vector3Distance(view->camera.position, blackHoleScaledPos);
-
-        // 1. DISCO DE ACRECIÓN REALISTA
-        // Múltiples capas con diferentes velocidades y colores
-        for (int layer = 0; layer < 5; layer++) {
-            float layerRadius = eventHorizonScaledRadius * (2.0f + layer * 0.8f);
-            float layerSpeed = 180.0f / (1.0f + layer * 0.3f); // Velocidad decrece con la distancia
-            float currentRotation = accretionRotation * layerSpeed / 90.0f;
-
-            // Color basado en temperatura (más caliente = más cerca)
-            Color layerColor;
-            if (layer == 0) layerColor = { 255, 255, 255, 200 }; // Blanco caliente
-            else if (layer == 1) layerColor = { 255, 200, 100, 180 }; // Amarillo
-            else if (layer == 2) layerColor = { 255, 150, 50, 160 }; // Naranja
-            else if (layer == 3) layerColor = { 255, 100, 0, 140 }; // Rojo
-            else layerColor = { 150, 50, 0, 120 }; // Rojo oscuro
-
-            // Dibujar partículas en espiral
-            int particleCount = 64 / (layer + 1); // Menos partículas en capas externas
-            for (int i = 0; i < particleCount; i++) {
-                float angle = (currentRotation + i * 360.0f / particleCount) * DEG2RAD;
-
-                // Espiral logarítmica para simular acreción
-                float spiralOffset = sinf(GetTime() + i * 0.1f) * 0.1f;
-                float actualRadius = layerRadius * (1.0f + spiralOffset);
-
-                Vector3 particlePos = {
-                    blackHoleScaledPos.x + actualRadius * cosf(angle),
-                    blackHoleScaledPos.y + sinf(angle * 3.0f + GetTime()) * actualRadius * 0.1f,
-                    blackHoleScaledPos.z + actualRadius * sinf(angle)
-                };
-
-                // Tamaño de partícula basado en distancia a la cámara
-                float particleSize = 0.05f / (cameraDistance / layerRadius + 0.1f);
-                DrawSphere(particlePos, particleSize, layerColor);
-
-                // Jets polares (solo en la primera capa)
-                if (layer == 0 && i % 8 == 0) {
-                    Vector3 jetPos = {
-                        blackHoleScaledPos.x,
-                        blackHoleScaledPos.y + eventHorizonScaledRadius * 3.0f * sinf(GetTime() + i),
-                        blackHoleScaledPos.z
-                    };
-                    DrawLine3D(blackHoleScaledPos, jetPos, { 100, 150, 255, 100 });
-                }
-            }
-        }
-
-        // 2. LENTE GRAVITACIONAL SIMULADO
-        // Dibujar anillos de distorsión alrededor del horizonte de eventos
-        for (int ring = 0; ring < 3; ring++) {
-            float ringRadius = eventHorizonScaledRadius * (1.2f + ring * 0.1f);
-            Color distortionColor = { 50, 0, 100, (unsigned char)(50 * gravitationalLensingEffect) };
-
-            for (int i = 0; i < 32; i++) {
-                float angle = i * 360.0f / 32 * DEG2RAD;
-                // Distorsión ondulante
-                float distortion = sinf(angle * 4.0f + GetTime() * 2.0f) * 0.1f;
-                float actualRadius = ringRadius * (1.0f + distortion);
-
-                Vector3 ringPoint = {
-                    blackHoleScaledPos.x + actualRadius * cosf(angle),
-                    blackHoleScaledPos.y,
-                    blackHoleScaledPos.z + actualRadius * sinf(angle)
-                };
-                DrawPoint3D(ringPoint, distortionColor);
-            }
-        }
-
-        // 3. RADIACIÓN DE HAWKING (partículas virtuales)
-        Color hawkingColor = { 255, 255, 255, (unsigned char)(30 * hawkingRadiationPulse) };
-        for (int i = 0; i < 16; i++) {
-            float angle = (i * 360.0f / 16 + GetTime() * 30.0f) * DEG2RAD;
-            float radius = eventHorizonScaledRadius * (1.05f + sinf(GetTime() * 5.0f + i) * 0.02f);
-
-            Vector3 hawkingPos = {
-                blackHoleScaledPos.x + radius * cosf(angle),
-                blackHoleScaledPos.y + sinf(GetTime() * 3.0f + i) * radius * 0.1f,
-                blackHoleScaledPos.z + radius * sinf(angle)
-            };
-            DrawPoint3D(hawkingPos, hawkingColor);
-        }
-
-        // 4. HORIZONTE DE EVENTOS MEJORADO
-        // Efecto de "absorción de luz" - múltiples capas con transparencia
+        // Accretion disk
         for (int layer = 0; layer < 3; layer++) {
-            float layerRadius = eventHorizonScaledRadius * (1.0f - layer * 0.05f);
-            Color horizonColor = { 0, 0, 0, (unsigned char)(255 - layer * 50) };
-            DrawSphere(blackHoleScaledPos, layerRadius, horizonColor);
-        }
+            float layerRadius = eventHorizonScaledRadius * (2.0f + layer * 0.8f);
+            Color layerColor = (layer == 0) ? Color{ 255, 255, 255, 200 } :
+                (layer == 1) ? Color{ 255, 200, 100, 180 } :
+                Color{ 255, 100, 0, 140 };
 
-        // 5. ERGOSFERA (para agujeros negros en rotación)
-        float ergosphereRadius = eventHorizonScaledRadius * 1.15f;
-        Color ergosphereColor = { 100, 0, 50, 30 };
-
-        // Dibujar ergosfera como superficie ondulante
-        for (int i = 0; i < 64; i++) {
-            float angle = i * 360.0f / 64 * DEG2RAD;
-            float wave = sinf(angle * 6.0f + GetTime() * 4.0f) * 0.05f;
-            float radius = ergosphereRadius * (1.0f + wave);
-
-            Vector3 ergoPoint = {
-                blackHoleScaledPos.x + radius * cosf(angle),
-                blackHoleScaledPos.y,
-                blackHoleScaledPos.z + radius * sinf(angle)
-            };
-            DrawPoint3D(ergoPoint, ergosphereColor);
-        }
-
-        // 6. EFECTOS DE DISTORSIÓN TEMPORAL
-        // Dibujar ondas gravitacionales si hay movimiento
-        static Vector3 lastBlackHolePos = blackHoleScaledPos;
-        Vector3 velocity = Vector3Subtract(blackHoleScaledPos, lastBlackHolePos);
-        float speed = Vector3Length(velocity);
-
-        if (speed > 0.001f) {
-            for (int wave = 0; wave < 3; wave++) {
-                float waveRadius = eventHorizonScaledRadius * (5.0f + wave * 2.0f + GetTime() * 2.0f);
-                Color waveColor = { 150, 100, 200, (unsigned char)(20 - wave * 5) };
-
-                for (int i = 0; i < 24; i++) {
-                    float angle = i * 360.0f / 24 * DEG2RAD;
-                    Vector3 wavePoint = {
-                        blackHoleScaledPos.x + waveRadius * cosf(angle),
-                        blackHoleScaledPos.y,
-                        blackHoleScaledPos.z + waveRadius * sinf(angle)
-                    };
-                    DrawPoint3D(wavePoint, waveColor);
-                }
+            int particleCount = 32 / (layer + 1);
+            for (int i = 0; i < particleCount; i++) {
+                float angle = (uiAnim.rotation + i * 360.0f / particleCount) * DEG2RAD;
+                Vector3 particlePos = {
+                    blackHoleScaledPos.x + layerRadius * cosf(angle),
+                    blackHoleScaledPos.y + sinf(angle * 3.0f + uiAnim.uiTime) * layerRadius * 0.1f,
+                    blackHoleScaledPos.z + layerRadius * sinf(angle)
+                };
+                DrawSphere(particlePos, 0.05f, layerColor);
             }
         }
-        lastBlackHolePos = blackHoleScaledPos;
 
-        // 7. EFECTOS DE LUZ Y SOMBRAS
-        // Simular el "shadow" del agujero negro
-        float shadowRadius = eventHorizonScaledRadius * 2.5f; // Radio de la sombra
-        Vector3 lightDirection = Vector3Normalize(Vector3Subtract(view->camera.position, blackHoleScaledPos));
-
-        // Dibujar círculo de sombra proyectada
-        for (int i = 0; i < 48; i++) {
-            float angle = i * 360.0f / 48 * DEG2RAD;
-            Vector3 shadowEdge = {
-                blackHoleScaledPos.x + shadowRadius * cosf(angle),
-                blackHoleScaledPos.y,
-                blackHoleScaledPos.z + shadowRadius * sinf(angle)
-            };
-
-            // Solo dibujar si está en el lado opuesto a la cámara
-            Vector3 toEdge = Vector3Normalize(Vector3Subtract(shadowEdge, blackHoleScaledPos));
-            if (Vector3DotProduct(toEdge, lightDirection) < 0) {
-                DrawPoint3D(shadowEdge, { 50, 0, 50, 100 });
-            }
-        }
+        // Event horizon
+        DrawSphere(blackHoleScaledPos, eventHorizonScaledRadius, BLACK);
     }
 
-    //Dibujar nave CON ROTACIÓN (si está inicializada)
-    //Dibujar nave CON ROTACIÓN Y PIVOT PERSONALIZADO
-    if (shipPtr != nullptr) {
-        // Definir el offset del pivot (relativo al centro del modelo)
-        Vector3 pivotOffset = { 0.0f, -2.0f, -1.5f }; // Por ejemplo, rotar desde 2 unidades abajo
-
-        // 1. Trasladar al pivot
-        Vector3 pivotPosition = Vector3Add(shipPos, pivotOffset);
-
-        // 2. Aplicar rotación alrededor del pivot
-        Matrix rotationMatrix = MatrixRotateY(shipRotationAngle * DEG2RAD);
-
-        // 3. Calcular la posición final (pivot + rotación del offset)
-        Vector3 rotatedOffset = Vector3Transform(Vector3Negate(pivotOffset), rotationMatrix);
-        Vector3 finalPosition = Vector3Add(pivotPosition, rotatedOffset);
-
-        Vector3 rotationAxis = { 0.0f, 1.0f, 0.0f };
-        Vector3 shipScale = { 0.01f, 0.01f, 0.01f };
-
-        DrawModelEx(*shipPtr, finalPosition, rotationAxis, shipRotationAngle, shipScale, WHITE);
-    }
+    // Renderizar la nave con el nuevo sistema modular
+    RenderShip(&view->camera);
 
     DrawGrid(10, 10.0f);
     EndMode3D();
 
-    static float timestamp = 0.0f;
+    // Update timestamp
     timestamp += sim->timeStep * UPDATEPERFRAME;
-    DrawText(getISODate(timestamp), WINDOW_WIDTH * 0.03, WINDOW_HEIGHT * 0.03, 20, RAYWHITE);
-    DrawFPS(WINDOW_WIDTH * 0.03, WINDOW_HEIGHT * (1 - 0.05));
-    DrawText(TextFormat("Planets: %d/9", rendered_planets),
-        WINDOW_WIDTH * 0.03, WINDOW_HEIGHT * 0.08, 16, RAYWHITE);
-    DrawText(TextFormat("Asteroids: %d/%d", rendered_asteroids, sim->numBodies - 9),
-        WINDOW_WIDTH * 0.03, WINDOW_HEIGHT * 0.11, 16, RAYWHITE);
-    DrawText(TextFormat("LOD Multiplier: %.2f", lodMultiplier),
-        WINDOW_WIDTH * 0.03, WINDOW_HEIGHT * 0.14, 16, RAYWHITE);
-    DrawText("Controls: +(E)/-(X) adjust LOD, R reset",
-        WINDOW_WIDTH * 0.03, WINDOW_HEIGHT * 0.17, 14, GRAY);
+
+    // Draw Enhanced UI Elements (resto del código existente...)
+    if (!menuState.isOpen) {
+        DrawEnhancedTopHUD(sim, timestamp);
+        DrawEnhancedLeftPanel(sim, lodMultiplier, rendered_planets, rendered_asteroids);
+        DrawEnhancedRightPanel();
+        DrawEnhancedBottomHUD(GetFPS());
+    }
+
+    // Draw main menu if open
+    if (menuState.isOpen) {
+        DrawMainMenu(sim);
+    }
 
     EndDrawing();
+}
+
+/**
+ * @brief Handle text input for asteroid count
+ */
+static void HandleTextInput(void) {
+    int key = GetCharPressed();
+
+    // Handle character input
+    while (key > 0) {
+        if (key >= 48 && key <= 57 && strlen(menuState.asteroidCountText) < 6) { // Numbers 0-9
+            int len = strlen(menuState.asteroidCountText);
+            if (menuState.cursorPosition <= len) {
+                // Insert character at cursor position
+                for (int i = len; i >= menuState.cursorPosition; i--) {
+                    menuState.asteroidCountText[i + 1] = menuState.asteroidCountText[i];
+                }
+                menuState.asteroidCountText[menuState.cursorPosition] = (char)key;
+                menuState.cursorPosition++;
+            }
+        }
+        key = GetCharPressed();
+    }
+
+    // Handle special keys
+    if (IsKeyPressed(KEY_BACKSPACE) && menuState.cursorPosition > 0) {
+        menuState.cursorPosition--;
+        int len = strlen(menuState.asteroidCountText);
+        for (int i = menuState.cursorPosition; i < len; i++) {
+            menuState.asteroidCountText[i] = menuState.asteroidCountText[i + 1];
+        }
+    }
+
+    if (IsKeyPressed(KEY_DELETE)) {
+        int len = strlen(menuState.asteroidCountText);
+        if (menuState.cursorPosition < len) {
+            for (int i = menuState.cursorPosition; i < len; i++) {
+                menuState.asteroidCountText[i] = menuState.asteroidCountText[i + 1];
+            }
+        }
+    }
+
+    if (IsKeyPressed(KEY_LEFT) && menuState.cursorPosition > 0) {
+        menuState.cursorPosition--;
+    }
+
+    if (IsKeyPressed(KEY_RIGHT)) {
+        int len = strlen(menuState.asteroidCountText);
+        if (menuState.cursorPosition < len) {
+            menuState.cursorPosition++;
+        }
+    }
+
+    if (IsKeyPressed(KEY_HOME)) {
+        menuState.cursorPosition = 0;
+    }
+
+    if (IsKeyPressed(KEY_END)) {
+        menuState.cursorPosition = strlen(menuState.asteroidCountText);
+    }
+
+    // Update asteroid count from text
+    int newCount = atoi(menuState.asteroidCountText);
+    if (newCount < 0) newCount = 0;
+    if (newCount > 5000) {
+        newCount = 5000;
+        strcpy(menuState.asteroidCountText, "5000");
+        menuState.cursorPosition = 4;
+    }
+    menuState.asteroidCount = newCount;
+
+    // Deactivate input if Enter is pressed or clicked outside
+    if (IsKeyPressed(KEY_ENTER) || IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        menuState.asteroidInputActive = false;
+    }
+}
+
+/**
+ * @brief Inicializa el renderizador de la nave
+ */
+static void InitializeShip(void) {
+    if (shipRenderer.isInitialized) return;
+
+    // Cargar el modelo
+    shipRenderer.model = LoadModel("assets/UFO.obj");
+    shipRenderer.isLoaded = IsModelValid(shipRenderer.model);
+
+    if (shipRenderer.isLoaded) {
+        // Configurar materiales y texturas
+        for (int i = 0; i < shipRenderer.model.materialCount; i++) {
+            // Configurar propiedades del material para evitar transparencias no deseadas
+            shipRenderer.model.materials[i].maps[MATERIAL_MAP_DIFFUSE].color = (i == 1) ? BLUE : WHITE;
+
+            // Habilitar culling para evitar ver a través del modelo
+            shipRenderer.model.materials[i].shader = LoadShader(NULL, NULL); // Shader por defecto
+        }
+        if (shipRenderer.isLoaded) {
+            printf("✅ Modelo cargado correctamente\n");
+        }
+        else {
+            printf("❌ Error: No se pudo cargar el modelo ship.obj\n");
+            printf("   Verifica que el archivo existe en: assets/ship.obj\n");
+        }
+
+        // Generar mesh tangents si no existen (mejora el renderizado)
+        for (int i = 0; i < shipRenderer.model.meshCount; i++) {
+            if (shipRenderer.model.meshes[i].tangents == NULL) {
+                GenMeshTangents(&shipRenderer.model.meshes[i]);
+            }
+        }
+    }
+
+    // Configuración inicial
+    shipRenderer.localRotation = Vector3{ 0.0f, 0.0f, 0.0f };
+    shipRenderer.scale = Vector3{ 0.008f, 0.008f, 0.008f };  // Más pequeña
+    shipRenderer.relativePosition = Vector3{ 8.0f, -1.5f, -3.0f }; // Más alejada y centrada
+    shipRenderer.rotationSpeed = 45.0f; // Grados por segundo - más lenta
+    shipRenderer.isInitialized = true;
+}
+
+/**
+ * @brief Actualiza la rotación local de la nave
+ */
+static void UpdateShipRotation(float deltaTime) {
+    if (!shipRenderer.isInitialized || !shipRenderer.isLoaded) return;
+
+    // Rotación solo en el eje Y (yaw) para que gire sobre sí misma
+    shipRenderer.localRotation.y += shipRenderer.rotationSpeed * deltaTime;
+
+    // Mantener el ángulo en el rango 0-360
+    if (shipRenderer.localRotation.y >= 360.0f) {
+        shipRenderer.localRotation.y -= 360.0f;
+    }
+}
+
+/**
+ * @brief Calcula la posición mundial de la nave relativa a la cámara
+ */
+static Vector3 CalculateShipWorldPosition(Camera3D* camera) {
+    // Calcular vectores de la cámara
+    Vector3 forward = Vector3Normalize(Vector3Subtract(camera->target, camera->position));
+    Vector3 right = Vector3Normalize(Vector3CrossProduct(forward, camera->up));
+    Vector3 up = Vector3Normalize(Vector3CrossProduct(right, forward));
+
+    // Calcular posición mundial basada en la posición relativa
+    Vector3 worldPos = camera->position;
+    worldPos = Vector3Add(worldPos, Vector3Scale(forward, shipRenderer.relativePosition.x));
+    worldPos = Vector3Add(worldPos, Vector3Scale(right, shipRenderer.relativePosition.z));
+    worldPos = Vector3Add(worldPos, Vector3Scale(up, shipRenderer.relativePosition.y));
+
+    return worldPos;
+}
+
+/**
+ * @brief Renderiza la nave en la posición calculada
+ */
+static void RenderShip(Camera3D* camera) {
+    if (!shipRenderer.isInitialized || !shipRenderer.isLoaded) return;
+
+    Vector3 worldPosition = CalculateShipWorldPosition(camera);
+
+    // Usar DrawModelEx con los parámetros correctos
+    Vector3 rotationAxis = { 0.0f, 1.0f, 0.0f }; // Eje Y para rotación local
+    float rotationAngle = shipRenderer.localRotation.y; // Solo rotación Y
+
+    DrawModelEx(
+        shipRenderer.model,
+        worldPosition,
+        rotationAxis,
+        rotationAngle,
+        shipRenderer.scale,
+        WHITE
+    );
+}
+
+/**
+ * @brief Limpia los recursos de la nave
+ */
+static void CleanupShip(void) {
+    if (shipRenderer.isLoaded) {
+        UnloadModel(shipRenderer.model);
+        shipRenderer.isLoaded = false;
+    }
+    shipRenderer.isInitialized = false;
+}
+
+/**
+ * @brief Handle menu input
+ */
+static void HandleMenuInput(OrbitalSim* sim) {
+    if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_M)) {
+        menuState.isOpen = !menuState.isOpen;
+        menuState.showConfirmReset = false;
+        menuState.asteroidInputActive = false;
+        if (menuState.isOpen) {
+            EnableCursor();
+        }
+        else {
+            DisableCursor();
+        }
+    }
+
+    if (IsKeyPressed(KEY_F5)) {
+        menuState.showConfirmReset = true;
+        menuState.isOpen = true;
+        EnableCursor();
+    }
+}
+
+/**
+ * @brief Draw text input field
+ */
+static void DrawTextInput(Rectangle rect, const char* text, bool isActive, const char* label) {
+    Color bgColor = isActive ? ColorAlpha(UI_PRIMARY_COLOR, 0.1f) : ColorAlpha(UI_SECONDARY_COLOR, 0.1f);
+    Color borderColor = isActive ? UI_PRIMARY_COLOR : UI_SECONDARY_COLOR;
+    Color textColor = UI_TEXT_PRIMARY;
+
+    DrawRectangleRounded(rect, 0.1f, 4, bgColor);
+    DrawRectangleRoundedLines(rect, 0.1f, 4, borderColor);
+
+    // Draw label
+    DrawText(label, rect.x, rect.y - 20, 12, UI_TEXT_SECONDARY);
+
+    // Draw text
+    Vector2 textPos = { rect.x + 10, rect.y + rect.height / 2 - 6 };
+    DrawText(text, textPos.x, textPos.y, 12, textColor);
+
+    // Draw cursor if active
+    if (isActive && (int)(menuState.cursorBlinkTimer * 2) % 2 == 0) {
+        const char* beforeCursor = TextFormat("%.*s", menuState.cursorPosition, text);
+        Vector2 beforeSize = MeasureTextEx(GetFontDefault(), beforeCursor, 12, 0);
+        Vector2 cursorPos = { textPos.x + beforeSize.x, textPos.y };
+        DrawLine(cursorPos.x, cursorPos.y, cursorPos.x, cursorPos.y + 12, UI_PRIMARY_COLOR);
+    }
+}
+
+/**
+ * @brief Draw main menu
+ */
+static void DrawMainMenu(OrbitalSim* sim) {
+    // Semi-transparent overlay
+    DrawRectangle(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, Color{ 0, 0, 0, 180 });
+
+    Rectangle menuPanel = GetCenteredRect(WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2, 700, 650);
+    DrawPanelBackground(menuPanel, UI_PANEL_BG);
+
+    // Menu title
+    DrawText("SIMULATION CONTROL PANEL", menuPanel.x + 160, menuPanel.y + 30, 24, UI_PRIMARY_COLOR);
+
+    float yPos = menuPanel.y + 80;
+
+    // System selection
+    DrawText("SELECT SYSTEM:", menuPanel.x + 50, yPos, 18, UI_TEXT_PRIMARY);
+    yPos += 40;
+
+    Rectangle solarBtn = { menuPanel.x + 50, yPos, 200, 40 };
+    Rectangle centauriBtn = { menuPanel.x + 300, yPos, 200, 40 };
+
+    bool solarPressed = IsMouseInside(solarBtn) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+    bool centauriPressed = IsMouseInside(centauriBtn) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+
+    if (solarPressed) menuState.selectedSystem = SYSTEM_TYPE_SOLAR;
+    if (centauriPressed) menuState.selectedSystem = SYSTEM_TYPE_ALPHA_CENTAURI;
+
+    Color solarColor = (menuState.selectedSystem == SYSTEM_TYPE_SOLAR) ? UI_SUCCESS_COLOR : UI_SECONDARY_COLOR;
+    Color centauriColor = (menuState.selectedSystem == SYSTEM_TYPE_ALPHA_CENTAURI) ? UI_SUCCESS_COLOR : UI_SECONDARY_COLOR;
+
+    DrawButton(solarBtn, "Solar System", menuState.selectedSystem == SYSTEM_TYPE_SOLAR, solarColor);
+    DrawButton(centauriBtn, "Alpha Centauri", menuState.selectedSystem == SYSTEM_TYPE_ALPHA_CENTAURI, centauriColor);
+
+    yPos += 80;
+
+    // Asteroid Configuration Section
+    DrawText("ASTEROID CONFIGURATION:", menuPanel.x + 50, yPos, 18, UI_TEXT_PRIMARY);
+    yPos += 40;
+
+    // Asteroid count input
+    Rectangle asteroidInput = { menuPanel.x + 50, yPos, 120, 35 };
+    bool inputClicked = IsMouseInside(asteroidInput) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+
+    if (inputClicked && !menuState.asteroidInputActive) {
+        menuState.asteroidInputActive = true;
+        menuState.cursorPosition = strlen(menuState.asteroidCountText);
+    }
+    else if (!inputClicked && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        menuState.asteroidInputActive = false;
+    }
+
+    DrawTextInput(asteroidInput, menuState.asteroidCountText, menuState.asteroidInputActive, "Count (0-5000)");
+
+    // Dispersion selection
+    DrawText("Dispersion:", menuPanel.x + 200, yPos - 15, 14, UI_TEXT_SECONDARY);
+
+    Rectangle tightBtn = { menuPanel.x + 200, yPos, 80, 35 };
+    Rectangle normalBtn = { menuPanel.x + 290, yPos, 80, 35 };
+    Rectangle wideBtn = { menuPanel.x + 380, yPos, 80, 35 };
+    Rectangle extremeBtn = { menuPanel.x + 470, yPos, 80, 35 };
+
+    bool tightPressed = IsMouseInside(tightBtn) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+    bool normalPressed = IsMouseInside(normalBtn) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+    bool widePressed = IsMouseInside(wideBtn) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+    bool extremePressed = IsMouseInside(extremeBtn) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+
+    if (tightPressed) menuState.selectedDispersion = DISPERSION_TIGHT;
+    if (normalPressed) menuState.selectedDispersion = DISPERSION_NORMAL;
+    if (widePressed) menuState.selectedDispersion = DISPERSION_WIDE;
+    if (extremePressed) menuState.selectedDispersion = DISPERSION_EXTREME;
+
+    Color tightColor = (menuState.selectedDispersion == DISPERSION_TIGHT) ? UI_SUCCESS_COLOR : UI_SECONDARY_COLOR;
+    Color normalColor = (menuState.selectedDispersion == DISPERSION_NORMAL) ? UI_SUCCESS_COLOR : UI_SECONDARY_COLOR;
+    Color wideColor = (menuState.selectedDispersion == DISPERSION_WIDE) ? UI_WARNING_COLOR : UI_SECONDARY_COLOR;
+    Color extremeColor = (menuState.selectedDispersion == DISPERSION_EXTREME) ? UI_ERROR_COLOR : UI_SECONDARY_COLOR;
+
+    DrawButton(tightBtn, "Tight", menuState.selectedDispersion == DISPERSION_TIGHT, tightColor);
+    DrawButton(normalBtn, "Normal", menuState.selectedDispersion == DISPERSION_NORMAL, normalColor);
+    DrawButton(wideBtn, "Wide", menuState.selectedDispersion == DISPERSION_WIDE, wideColor);
+    DrawButton(extremeBtn, "Extreme", menuState.selectedDispersion == DISPERSION_EXTREME, extremeColor);
+
+    // Display dispersion info
+    yPos += 45;
+    DrawText(TextFormat("Range: 2E11 to %.1fE%s",
+        getDispersionRange(menuState.selectedDispersion) >= 1E12F ?
+        getDispersionRange(menuState.selectedDispersion) / 1E12F : getDispersionRange(menuState.selectedDispersion) / 1E11F,
+        getDispersionRange(menuState.selectedDispersion) >= 1E12F ? "12" : "11"),
+        menuPanel.x + 200, yPos, 12, UI_TEXT_SECONDARY);
+
+    yPos += 40;
+
+    // Easter egg selection
+    DrawText("EASTER EGGS:", menuPanel.x + 50, yPos, 18, UI_TEXT_PRIMARY);
+    yPos += 40;
+
+    Rectangle noneBtn = { menuPanel.x + 50, yPos, 150, 35 };
+    Rectangle phiBtn = { menuPanel.x + 220, yPos, 150, 35 };
+    Rectangle jupiterBtn = { menuPanel.x + 390, yPos, 150, 35 };
+
+    bool nonePressed = IsMouseInside(noneBtn) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+    bool phiPressed = IsMouseInside(phiBtn) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+    bool jupiterPressed = IsMouseInside(jupiterBtn) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+
+    if (nonePressed) menuState.selectedEasterEgg = EASTER_EGG_NONE;
+    if (phiPressed) menuState.selectedEasterEgg = EASTER_EGG_PHI;
+    if (jupiterPressed) menuState.selectedEasterEgg = EASTER_EGG_JUPITER_1000X;
+
+    Color noneColor = (menuState.selectedEasterEgg == EASTER_EGG_NONE) ? UI_SUCCESS_COLOR : UI_SECONDARY_COLOR;
+    Color phiColor = (menuState.selectedEasterEgg == EASTER_EGG_PHI) ? UI_WARNING_COLOR : UI_SECONDARY_COLOR;
+    Color jupiterColor = (menuState.selectedEasterEgg == EASTER_EGG_JUPITER_1000X) ? UI_ERROR_COLOR : UI_SECONDARY_COLOR;
+
+    DrawButton(noneBtn, "None", menuState.selectedEasterEgg == EASTER_EGG_NONE, noneColor);
+    DrawButton(phiBtn, "Phi Effect", menuState.selectedEasterEgg == EASTER_EGG_PHI, phiColor);
+    DrawButton(jupiterBtn, "Jupiter 1000x", menuState.selectedEasterEgg == EASTER_EGG_JUPITER_1000X, jupiterColor);
+
+    yPos += 70;
+
+    // Action buttons
+    Rectangle applyBtn = { menuPanel.x + 80, yPos, 120, 45 };
+    Rectangle resetBtn = { menuPanel.x + 220, yPos, 120, 45 };
+    Rectangle closeBtn = { menuPanel.x + 360, yPos, 120, 45 };
+
+    bool applyPressed = IsMouseInside(applyBtn) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+    bool resetPressed = IsMouseInside(resetBtn) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+    bool closePressed = IsMouseInside(closeBtn) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+
+    DrawButton(applyBtn, "APPLY", applyPressed, UI_SUCCESS_COLOR);
+    DrawButton(resetBtn, "RESET", resetPressed, UI_ERROR_COLOR);
+    DrawButton(closeBtn, "CLOSE", closePressed, UI_SECONDARY_COLOR);
+
+    if (applyPressed) {
+        InitializeSystem(sim);
+        menuState.isOpen = false;
+        menuState.asteroidInputActive = false;
+        DisableCursor();
+    }
+
+    if (resetPressed || menuState.showConfirmReset) {
+        // Si acabamos de presionar reset, inicializar el timer
+        if (resetPressed && !menuState.showConfirmReset) {
+            menuState.showConfirmReset = true;
+            menuState.confirmDialogTimer = 0.0f;  // Resetear el timer
+        }
+
+        // Confirmation dialog
+        Rectangle confirmPanel = GetCenteredRect(WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2 + 100, 400, 150);
+        DrawPanelBackground(confirmPanel, UI_ERROR_COLOR);
+
+        DrawText("CONFIRM RESET?", confirmPanel.x + 120, confirmPanel.y + 30, 18, WHITE);
+        DrawText("This will restart the simulation", confirmPanel.x + 80, confirmPanel.y + 60, 14, WHITE);
+
+        Rectangle yesBtn = { confirmPanel.x + 80, confirmPanel.y + 90, 80, 35 };
+        Rectangle noBtn = { confirmPanel.x + 200, confirmPanel.y + 90, 80, 35 };
+
+        // Solo permitir clicks después de 0.3 segundos
+        bool canClick = menuState.confirmDialogTimer > 0.3f;
+
+        bool yesPressed = canClick && IsMouseInside(yesBtn) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+        bool noPressed = canClick && IsMouseInside(noBtn) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+
+        // Cambiar el color de los botones si no se pueden clickear aún
+        Color yesColor = canClick ? UI_SECONDARY_COLOR : ColorAlpha(UI_SECONDARY_COLOR, 0.5f);
+        Color noColor = canClick ? UI_SECONDARY_COLOR : ColorAlpha(UI_SECONDARY_COLOR, 0.5f);
+
+        DrawButton(yesBtn, "YES", yesPressed, yesColor);
+        DrawButton(noBtn, "NO", noPressed, noColor);
+
+        // Mostrar countdown si aún no se puede clickear
+        if (!canClick) {
+            int countdown = (int)((0.3f - menuState.confirmDialogTimer) * 10) + 1;
+            DrawText(TextFormat("Wait %d...", countdown), confirmPanel.x + 180, confirmPanel.y + 130, 12, UI_TEXT_SECONDARY);
+        }
+
+        if (yesPressed) {
+            InitializeSystem(sim);
+            menuState.isOpen = false;
+            menuState.showConfirmReset = false;
+            menuState.asteroidInputActive = false;
+            menuState.confirmDialogTimer = 0.0f;  // Resetear timer
+            renderView(0, sim, 1); // Reset timestamp
+            DisableCursor();
+        }
+
+        if (noPressed) {
+            menuState.showConfirmReset = false;
+            menuState.confirmDialogTimer = 0.0f;  // Resetear timer
+        }
+    }
+
+    if (closePressed) {
+        menuState.isOpen = false;
+        menuState.asteroidInputActive = false;
+        DisableCursor();
+    }
+
+    // Instructions
+    DrawText("Press ESC or M to open/close menu | F5 for quick reset", menuPanel.x + 50, menuPanel.y + 600, 12, UI_TEXT_SECONDARY);
+    DrawText("Click on asteroid count field to edit | Use arrow keys to move cursor", menuPanel.x + 50, menuPanel.y + 615, 12, UI_TEXT_SECONDARY);
+}
+
+/**
+ * @brief Initialize system based on menu selection
+ */
+static void InitializeSystem(OrbitalSim* sim) {
+    SimConfig newConfig = {
+        menuState.selectedSystem,
+        menuState.selectedEasterEgg,
+        menuState.selectedDispersion,
+        menuState.asteroidCount
+    };
+
+    resetOrbitalSim(sim, &newConfig);
+}
+
+/**
+ * @brief Draw enhanced top HUD
+ */
+static void DrawEnhancedTopHUD(OrbitalSim* sim, float timestamp) {
+    Rectangle topHUD = { 0, 0, WINDOW_WIDTH, 80 };
+    DrawPanelBackground(topHUD, UI_BACKGROUND);
+
+    // Logo section
+    Vector2 logoPos = { 30, 15 };
+
+    // Animated orbital icon
+    Vector2 orbitCenter = { logoPos.x + 20, logoPos.y + 25 };
+    DrawCircleLines(orbitCenter.x, orbitCenter.y, 18, UI_PRIMARY_COLOR);
+
+    float orbitX = orbitCenter.x + 15 * cosf(uiAnim.rotation * DEG2RAD);
+    float orbitY = orbitCenter.y + 15 * sinf(uiAnim.rotation * DEG2RAD);
+    DrawCircle(orbitX, orbitY, 3, WHITE);
+    DrawCircle(orbitCenter.x, orbitCenter.y, 2, UI_PRIMARY_COLOR);
+
+    // Title
+    DrawText("EDA ORBITAL SIMULATION", logoPos.x + 60, logoPos.y + 10, 24, UI_PRIMARY_COLOR);
+    DrawText("Advanced Physics Engine", logoPos.x + 60, logoPos.y + 35, 12, UI_TEXT_SECONDARY);
+
+    // Date display
+    const char* dateStr = getISODate(timestamp);
+    Vector2 dateSize = MeasureTextEx(GetFontDefault(), dateStr, 28, 0);
+    Vector2 datePos = { WINDOW_WIDTH / 2 - dateSize.x / 2, 20 };
+    DrawText(dateStr, datePos.x, datePos.y, 28, UI_PRIMARY_COLOR);
+    DrawText("SIMULATION DATE", datePos.x + 20, datePos.y + 30, 10, UI_TEXT_SECONDARY);
+
+    // FPS counter and menu hint
+    int fps = GetFPS();
+    Color fpsColor = (fps >= 55) ? UI_SUCCESS_COLOR : (fps >= 30) ? UI_WARNING_COLOR : UI_ERROR_COLOR;
+    DrawText(TextFormat("%d FPS", fps), WINDOW_WIDTH - 160, 15, 20, fpsColor);
+    DrawText("Press M for Menu", WINDOW_WIDTH - 160, 45, 12, UI_TEXT_SECONDARY);
+}
+
+/**
+ * @brief Draw enhanced left panel
+ */
+static void DrawEnhancedLeftPanel(OrbitalSim* sim, float lodMultiplier, int rendered_planets, int rendered_asteroids) {
+    Rectangle panel = { PANEL_MARGIN, 100, 320, 500 };
+    DrawPanelBackground(panel, UI_PANEL_BG);
+
+    // Panel header
+    Vector2 headerPos = { panel.x + PANEL_PADDING, panel.y + PANEL_PADDING };
+    DrawText("SYSTEM STATUS", headerPos.x + 60, headerPos.y, 18, UI_PRIMARY_COLOR);
+
+    // Stats grid
+    float statY = headerPos.y + 40;
+    float statSpacing = 80;
+
+    // Planet count
+    Rectangle planetStat = { panel.x + 20, statY, STAT_BOX_SIZE, 60 };
+    DrawStatBox(planetStat, TextFormat("%d/%d", rendered_planets, sim->systemBodies), "PLANETS", UI_SUCCESS_COLOR);
+
+    // Asteroid count  
+    Rectangle asteroidStat = { panel.x + 160, statY, STAT_BOX_SIZE, 60 };
+    DrawStatBox(asteroidStat, TextFormat("%d", rendered_asteroids), "RENDERED", UI_WARNING_COLOR);
+
+    statY += statSpacing;
+
+    // Total bodies
+    Rectangle totalStat = { panel.x + 20, statY, STAT_BOX_SIZE, 60 };
+    DrawStatBox(totalStat, TextFormat("%d", sim->numBodies), "TOTAL", UI_SECONDARY_COLOR);
+
+    // Black holes
+    Rectangle bhStat = { panel.x + 160, statY, STAT_BOX_SIZE, 60 };
+    int bhCount = sim->blackHole.isActive ? 1 : 0;
+    Color bhColor = bhCount > 0 ? UI_ERROR_COLOR : UI_TEXT_SECONDARY;
+    DrawStatBox(bhStat, TextFormat("%d", bhCount), "BLACK HOLES", bhColor);
+
+    // Current Configuration Info
+    statY += 80;
+    DrawText("CURRENT CONFIG", panel.x + PANEL_PADDING, statY, 14, UI_PRIMARY_COLOR);
+
+    Rectangle configPanel = { panel.x + 20, statY + 25, 280, 120 };
+    DrawPanelBackground(configPanel, Color{ 0, 0, 0, 100 });
+
+    DrawText(TextFormat("System: %s", getSystemName(sim->config.systemType)),
+        configPanel.x + 10, configPanel.y + 10, 14, UI_TEXT_PRIMARY);
+    DrawText(TextFormat("Asteroids: %d", sim->asteroidCount),
+        configPanel.x + 10, configPanel.y + 30, 14, UI_TEXT_PRIMARY);
+    DrawText(TextFormat("Dispersion: %s", getDispersionName(sim->config.dispersion)),
+        configPanel.x + 10, configPanel.y + 50, 14, UI_TEXT_PRIMARY);
+    DrawText(TextFormat("Easter Egg: %s", getEasterEggName(sim->config.easterEgg)),
+        configPanel.x + 10, configPanel.y + 70, 14, UI_TEXT_PRIMARY);
+    DrawText("Open menu (M) to modify", configPanel.x + 10, configPanel.y + 90, 12, UI_TEXT_SECONDARY);
+
+    // LOD Control section
+    statY += 160;
+    DrawText("LOD CONTROL", panel.x + PANEL_PADDING, statY, 14, UI_PRIMARY_COLOR);
+
+    Rectangle lodPanel = { panel.x + 20, statY + 25, 280, 80 };
+    DrawPanelBackground(lodPanel, Color{ 0, 0, 0, 100 });
+
+    // LOD value display
+    DrawText(TextFormat("Multiplier: %.2f", lodMultiplier), lodPanel.x + 10, lodPanel.y + 10, 16, UI_TEXT_PRIMARY);
+
+    // LOD buttons
+    float btnY = lodPanel.y + 35;
+    float btnWidth = 60;
+    float btnSpacing = 70;
+
+    Rectangle btnInc = { lodPanel.x + 15, btnY, btnWidth, BUTTON_HEIGHT };
+    Rectangle btnDec = { lodPanel.x + 15 + btnSpacing, btnY, btnWidth, BUTTON_HEIGHT };
+    Rectangle btnRst = { lodPanel.x + 15 + btnSpacing * 2, btnY, btnWidth, BUTTON_HEIGHT };
+
+    bool key1Pressed = IsKeyPressed(KEY_ONE);
+    bool key2Pressed = IsKeyPressed(KEY_TWO);
+    bool keyRPressed = IsKeyPressed(KEY_R);
+
+    DrawButton(btnInc, "+(1)", key1Pressed, UI_SUCCESS_COLOR);
+    DrawButton(btnDec, "-(2)", key2Pressed, UI_WARNING_COLOR);
+    DrawButton(btnRst, "RST(R)", keyRPressed, UI_SECONDARY_COLOR);
+}
+
+/**
+ * @brief Draw enhanced right panel
+ */
+static void DrawEnhancedRightPanel(void) {
+    Rectangle panel = { WINDOW_WIDTH - 280 - PANEL_MARGIN, 100, 280, 300 };
+    DrawPanelBackground(panel, UI_PANEL_BG);
+
+    DrawText("CONTROLS", panel.x + 90, panel.y + 20, 18, UI_PRIMARY_COLOR);
+
+    float yPos = panel.y + 60;
+    float lineHeight = 30;
+
+    struct {
+        const char* action;
+        const char* key;
+        Color keyColor;
+    } controls[] = {
+        {"Increase LOD", "1", UI_SUCCESS_COLOR},
+        {"Decrease LOD", "2", UI_WARNING_COLOR},
+        {"Reset LOD", "R", UI_SECONDARY_COLOR},
+        {"Create Black Hole", "K", UI_ERROR_COLOR},
+        {"Open Menu", "M/ESC", UI_PRIMARY_COLOR},
+        {"Quick Reset", "F5", UI_ERROR_COLOR},
+        {"Free Camera", "WASD", UI_TEXT_PRIMARY},
+        {"Camera Look", "Mouse", UI_TEXT_PRIMARY}
+    };
+
+    for (int i = 0; i < 8; i++) {
+        DrawText(controls[i].action, panel.x + 20, yPos, 13, UI_TEXT_PRIMARY);
+
+        Rectangle keyRect = { panel.x + 180, yPos - 3, 70, 18 };
+        DrawPanelBackground(keyRect, Color{ 30, 40, 60, 255 });
+        DrawText(controls[i].key, keyRect.x + 8, keyRect.y + 2, 12, controls[i].keyColor);
+
+        yPos += lineHeight;
+    }
+}
+
+/**
+ * @brief Draw enhanced bottom HUD
+ */
+static void DrawEnhancedBottomHUD(int fps) {
+    Rectangle bottomHUD = { 0, WINDOW_HEIGHT - 60, WINDOW_WIDTH, 60 };
+    DrawPanelBackground(bottomHUD, UI_BACKGROUND);
+
+    Vector2 centerPos = { WINDOW_WIDTH / 2 - 150, WINDOW_HEIGHT - 40 };
+
+    // Status indicators
+    struct {
+        const char* label;
+        Color color;
+        bool active;
+    } indicators[] = {
+        {"Simulation Active", UI_SUCCESS_COLOR, true},
+        {"Physics Engine", UI_WARNING_COLOR, fps > 30},
+        {"Rendering", UI_PRIMARY_COLOR, true}
+    };
+
+    for (int i = 0; i < 3; i++) {
+        Vector2 pos = { centerPos.x + i * 150, centerPos.y };
+
+        // Animated dot
+        float dotSize = 4 + uiAnim.pulse * 2;
+        Color dotColor = indicators[i].active ? indicators[i].color : UI_TEXT_SECONDARY;
+        DrawCircle(pos.x, pos.y + 5, dotSize, dotColor);
+
+        DrawText(indicators[i].label, pos.x + 15, pos.y, 12, UI_TEXT_SECONDARY);
+    }
+}
+
+/**
+ * @brief Draw panel background with border
+ */
+static void DrawPanelBackground(Rectangle rect, Color color) {
+    DrawRectangleRounded(rect, 0.1f, 6, color);
+    DrawRectangleRoundedLines(rect, 0.1f, 6, ColorAlpha(UI_PRIMARY_COLOR, 0.3f));
+}
+
+/**
+ * @brief Draw statistic box
+ */
+static void DrawStatBox(Rectangle rect, const char* value, const char* label, Color accentColor) {
+    DrawPanelBackground(rect, ColorAlpha(accentColor, 0.1f));
+
+    Vector2 valueSize = MeasureTextEx(GetFontDefault(), value, 24, 0);
+    Vector2 labelSize = MeasureTextEx(GetFontDefault(), label, 10, 0);
+
+    DrawText(value, rect.x + rect.width / 2 - valueSize.x / 2, rect.y + 8, 24, UI_TEXT_PRIMARY);
+    DrawText(label, rect.x + rect.width / 2 - labelSize.x / 2, rect.y + 35, 10, UI_TEXT_SECONDARY);
+
+    if (IsMouseInside(rect)) {
+        DrawRectangleRoundedLines(rect, 0.1f, 6, accentColor);
+    }
+}
+
+/**
+ * @brief Draw button with press effect
+ */
+static void DrawButton(Rectangle rect, const char* text, bool isPressed, Color color) {
+    Color bgColor = isPressed ? color : ColorAlpha(color, 0.2f);
+    Color textColor = isPressed ? BLACK : color;
+
+    DrawRectangleRounded(rect, 0.2f, 4, bgColor);
+    DrawRectangleRoundedLines(rect, 0.2f, 4, color);
+
+    Vector2 textSize = MeasureTextEx(GetFontDefault(), text, 12, 0);
+    Vector2 textPos = { rect.x + rect.width / 2 - textSize.x / 2, rect.y + rect.height / 2 - textSize.y / 2 };
+    DrawText(text, textPos.x, textPos.y, 12, textColor);
+}
+
+/**
+ * @brief Check if mouse is inside rectangle
+ */
+static bool IsMouseInside(Rectangle rect) {
+    Vector2 mousePos = GetMousePosition();
+    return CheckCollisionPointRec(mousePos, rect);
+}
+
+/**
+ * @brief Get centered rectangle
+ */
+static Rectangle GetCenteredRect(float x, float y, float width, float height) {
+    return Rectangle{ x - width / 2, y - height / 2, width, height };
 }

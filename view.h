@@ -12,18 +12,18 @@
 #include "orbitalSim.h"
 #define UPDATEPERFRAME 10
 
-/**
- * The view data
- */
+ /**
+  * The view data
+  */
 struct View
 {
     Camera3D camera;
 };
 
-View *constructView(int fps);
-void destroyView(View *view);
+View* constructView(int fps);
+void destroyView(View* view);
 
-bool isViewRendering(View *view);
-void renderView(View *view, OrbitalSim *sim);
+bool isViewRendering(View* view);
+void renderView(View* view, OrbitalSim* sim, int reset);
 
 #endif
