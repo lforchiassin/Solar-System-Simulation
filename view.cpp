@@ -144,7 +144,7 @@ View* constructView(int fps) {
     view->camera.projection = CAMERA_PERSPECTIVE;
 
     if (!shipLoaded) {
-        ship = LoadModel("assets/ship.obj");
+        ship = LoadModel("assets/Ufo.obj");
         shipLoaded = true;
     }
 
@@ -172,6 +172,12 @@ bool isViewRendering(View* view) {
  */
 void renderView(View* view, OrbitalSim* sim, int reset) {
     static float timestamp = 0.0f;
+
+    static bool beamActive = false;
+    static float beamTimer = 0.0f;
+    static Vector3 beamStartPos = { 0 };
+    static Vector3 beamEndPos = { 0 };
+
     if (reset)
     {
         timestamp = 0.0f;
@@ -182,7 +188,6 @@ void renderView(View* view, OrbitalSim* sim, int reset) {
     uiAnim.uiTime = GetTime();
     uiAnim.rotation += 45.0f * GetFrameTime();
     uiAnim.pulse = (sinf(uiAnim.uiTime * 2.0f) + 1.0f) * 0.5f;
-    uiAnim.glow = (sinf(uiAnim.uiTime * 1.5f) + 1.0f) * 0.5f;
 
     menuState.animationTime += GetFrameTime();
     menuState.cursorBlinkTimer += GetFrameTime();
@@ -209,9 +214,11 @@ void renderView(View* view, OrbitalSim* sim, int reset) {
         if (IsKeyPressed(KEY_R)) lodMultiplier = 1.0f;
 
         if (IsKeyPressed(KEY_K) && !sim->blackHole.isActive) {
-            Vector3 blackHolePos = Vector3Scale(view->camera.position, 1.0f / SCALE_FACTOR);
-            blackHolePos.y = 0;
-            createBlackHole(sim, blackHolePos);
+			Vector3 shipPos = CalculateShipWorldPosition(&view->camera);
+            beamActive = true;
+            beamTimer = 0.0f;
+            beamStartPos = shipPos;
+            beamEndPos = Vector3{ shipPos.x, 0.0f, shipPos.z };
         }
     }
 
@@ -219,9 +226,10 @@ void renderView(View* view, OrbitalSim* sim, int reset) {
     InitializeShip();
     UpdateShipRotation(GetFrameTime());
 
-    if (!menuState.isOpen) {
+    if (!menuState.isOpen && !beamActive) {
         UpdateCamera(&view->camera, CAMERA_FREE);
     }
+
 
     BeginDrawing();
     ClearBackground(BLACK);
@@ -315,6 +323,30 @@ void renderView(View* view, OrbitalSim* sim, int reset) {
 
 	// spaceship rendering
     RenderShip(&view->camera);
+
+    if (beamActive) {
+        beamTimer += GetFrameTime();
+
+        // Color violeta pulsante
+        float pulse = (sinf(GetTime() * 20.0f) + 1.0f) * 0.5f;
+        Color violet = { 200, (unsigned char)(pulse * 100), 255, 200 };
+
+        DrawCylinderEx(
+            beamStartPos,
+            beamEndPos,
+            0.2f,  // radio superior
+            0.2f,  // radio inferior
+            16,
+            violet
+        );
+
+        // Cuando pasa 1 segundo, spawnea el agujero negro
+        if (beamTimer > 1.0f) {
+            Vector3 blackHolePos = Vector3Scale(beamEndPos, 1.0f / SCALE_FACTOR);
+            createBlackHole(sim, blackHolePos);
+            beamActive = false;
+        }
+    }
 
     DrawGrid(10, 10.0f);
     EndMode3D();
@@ -427,7 +459,7 @@ static void InitializeShip(void) {
     if (shipRenderer.isInitialized) return;
 
     // Loading space model
-    shipRenderer.model = LoadModel("assets/UFO.obj");
+    shipRenderer.model = LoadModel("assets/Ufo.obj");
     shipRenderer.isLoaded = IsModelValid(shipRenderer.model);
 
     if (shipRenderer.isLoaded) {
@@ -456,9 +488,9 @@ static void InitializeShip(void) {
 
     // Initial settings
     shipRenderer.localRotation = Vector3{ 0.0f, 0.0f, 0.0f };
-    shipRenderer.scale = Vector3{ 0.008f, 0.008f, 0.008f };  
-    shipRenderer.relativePosition = Vector3{ 8.0f, -1.5f, -3.0f }; 
-    shipRenderer.rotationSpeed = 45.0f; 
+    shipRenderer.scale = Vector3{ 0.08f, 0.08f, 0.08f };
+    shipRenderer.relativePosition = Vector3{ 2, -0.2, 0 }; 
+    shipRenderer.rotationSpeed = 150.0f; 
     shipRenderer.isInitialized = true;
 }
 
@@ -583,11 +615,11 @@ static void DrawMainMenu(OrbitalSim* sim) {
     // Semi-transparent overlay
     DrawRectangle(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, Color{ 0, 0, 0, 180 });
 
-    Rectangle menuPanel = GetCenteredRect(WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2, 700, 650);
+    Rectangle menuPanel = GetCenteredRect(WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2, 600, 650);
     DrawPanelBackground(menuPanel, UI_PANEL_BG);
 
     // Menu title
-    DrawText("SIMULATION CONTROL PANEL", menuPanel.x + 160, menuPanel.y + 30, 24, UI_PRIMARY_COLOR);
+    DrawText("SIMULATION CONTROL PANEL", menuPanel.x + 120, menuPanel.y + 30, 24, UI_PRIMARY_COLOR);
 
     float yPos = menuPanel.y + 80;
 
