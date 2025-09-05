@@ -71,8 +71,8 @@ static MenuState menuState = {
     false,                   // showConfirmReset
     0.0f,                    // animationTime
     0.0f,                    // confirmDialogTimer
-    "500",                  // asteroidCountText
-    500,                    // asteroidCount
+    "1000",                  // asteroidCountText
+    1000,                    // asteroidCount
     false,                   // asteroidInputActive
     4,                       // cursorPosition
     0.0f                     // cursorBlinkTimer
@@ -193,7 +193,7 @@ void renderView(View* view, OrbitalSim* sim, int reset) {
         menuState.confirmDialogTimer += GetFrameTime();
     }
 
-    static float lodMultiplier = 1.0f;
+    static float lodMultiplier = 0.8f;
 
     // Handle menu input
     HandleMenuInput(sim);
@@ -323,11 +323,18 @@ void renderView(View* view, OrbitalSim* sim, int reset) {
     // Update timestamp
     timestamp += sim->timeStep * UPDATEPERFRAME;
 
+	static bool f3PressedLastFrame = true;
+    if (IsKeyPressed(KEY_F3)) f3PressedLastFrame = !f3PressedLastFrame;
+
     // Draw Enhanced UI Elements (resto del código existente...)
     if (!menuState.isOpen) {
         DrawEnhancedTopHUD(sim, timestamp);
-        DrawEnhancedLeftPanel(sim, lodMultiplier, rendered_planets, rendered_asteroids);
-        DrawEnhancedRightPanel();
+
+        if (f3PressedLastFrame)
+        {
+            DrawEnhancedLeftPanel(sim, lodMultiplier, rendered_planets, rendered_asteroids);
+            DrawEnhancedRightPanel();
+        }
         DrawEnhancedBottomHUD(GetFPS());
     }
 
@@ -708,6 +715,7 @@ static void DrawMainMenu(OrbitalSim* sim) {
         InitializeSystem(sim);
         menuState.isOpen = false;
         menuState.asteroidInputActive = false;
+		renderView(0, sim, 1); // Reset timestamp
         DisableCursor();
     }
 
@@ -909,7 +917,7 @@ static void DrawEnhancedLeftPanel(OrbitalSim* sim, float lodMultiplier, int rend
  * @brief Draw enhanced right panel
  */
 static void DrawEnhancedRightPanel(void) {
-    Rectangle panel = { WINDOW_WIDTH - 280 - PANEL_MARGIN, 100, 280, 300 };
+    Rectangle panel = { WINDOW_WIDTH - 280 - PANEL_MARGIN, 100, 280, 320 };
     DrawPanelBackground(panel, UI_PANEL_BG);
 
     DrawText("CONTROLS", panel.x + 90, panel.y + 20, 18, UI_PRIMARY_COLOR);
@@ -929,10 +937,13 @@ static void DrawEnhancedRightPanel(void) {
         {"Open Menu", "M/ESC", UI_PRIMARY_COLOR},
         {"Quick Reset", "F5", UI_ERROR_COLOR},
         {"Free Camera", "WASD", UI_TEXT_PRIMARY},
-        {"Camera Look", "Mouse", UI_TEXT_PRIMARY}
+        {"Camera Look", "Mouse", UI_TEXT_PRIMARY},
+        {"Show/Hide Interface", "F3", UI_TEXT_PRIMARY }
     };
 
-    for (int i = 0; i < 8; i++) {
+    int n = sizeof(controls) / sizeof(controls[0]);
+
+    for (int i = 0; i < n; i++) {
         DrawText(controls[i].action, panel.x + 20, yPos, 13, UI_TEXT_PRIMARY);
 
         Rectangle keyRect = { panel.x + 180, yPos - 3, 70, 18 };

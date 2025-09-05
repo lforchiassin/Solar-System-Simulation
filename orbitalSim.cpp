@@ -21,7 +21,6 @@ static void configureAsteroid(OrbitalBody* body, float centerMass, DispersionTyp
 static void ComputeGravitationalAccelerations(OrbitalSim* sim, OrbitalBody* bodies, Vector3* accelerations, int n);
 static void ComputeBlackHoleAcceleration(BlackHole* blackHole, OrbitalBody* bodies, Vector3* accelerations, int n);
 static void HandleBlackHoleCollision(BlackHole* blackHole, OrbitalBody* body, int n);
-static Vector3 ComputeBlackHoleSelfAcceleration(BlackHole* blackHole, OrbitalBody* bodies, int n);
 static void initializeSolarSystem(OrbitalSim* sim);
 static void initializeAlphaCentauriSystem(OrbitalSim* sim);
 static void initializeAsteroids(OrbitalSim* sim, int count, DispersionType dispersion);
@@ -35,6 +34,7 @@ void createBlackHole(OrbitalSim* sim, Vector3 position) {
     sim->blackHole.radius = 200.0f * sim->blackHole.eventHorizonRadius;
     sim->blackHole.isActive = true;
     sim->blackHole.growthRate = 1E3f; // Crece rápidamente al consumir materia
+	sim->blackHole.acceleration = { 0.0f, 0.0f, 0.0f };
 }
 
 /**
@@ -155,10 +155,10 @@ void updateOrbitalSim(OrbitalSim* sim) {
     ComputeGravitationalAccelerations(sim, bodies, accelerations, n);
 
     if (sim->blackHole.isActive) {
+        sim->blackHole.acceleration = { 0, 0, 0 };
         ComputeBlackHoleAcceleration(&sim->blackHole, bodies, accelerations, n);
         // Actualizar posición del agujero
-        Vector3 accBH = ComputeBlackHoleSelfAcceleration(&sim->blackHole, bodies, n);
-        accBH = Vector3Scale(accBH, 0.1f);
+        Vector3 accBH = sim->blackHole.acceleration;
         sim->blackHole.velocity = Vector3Add(sim->blackHole.velocity,
             Vector3Scale(accBH, dt));
         sim->blackHole.position = Vector3Add(sim->blackHole.position,
@@ -428,10 +428,10 @@ static void ComputeGravitationalAccelerations(OrbitalSim *sim, OrbitalBody* bodi
             if (!bodies[j].isAlive) continue;
 
             Vector3 r_vec = Vector3Subtract(bodies[j].position, bodies[i].position);
-            double r_squared = Vector3LengthSqr(r_vec);
+            float r_squared = Vector3LengthSqr(r_vec);
 
             if (r_squared < INFLUENCE_DISTANCE_SQ && r_squared > MIN_DISTANCE_CUBED) {
-                double r_cubed = r_squared * sqrt(r_squared);
+                float r_cubed = r_squared * sqrt(r_squared);
                 double force_magnitude = GRAVITATIONAL_CONSTANT / r_cubed;
                 Vector3 accel_asteroid = Vector3Scale(r_vec, -force_magnitude * bodies[i].mass);
                 accelerations[j] = Vector3Add(accelerations[j], accel_asteroid);
@@ -450,94 +450,52 @@ static void ComputeBlackHoleAcceleration(BlackHole* blackHole, OrbitalBody* bodi
     for (int i = 0; i < n; i++) {
         if (!bodies[i].isAlive) continue;
 
-        double dx = (double)bodies[i].position.x - (double)blackHole->position.x;
-        double dy = (double)bodies[i].position.y - (double)blackHole->position.y;
-        double dz = (double)bodies[i].position.z - (double)blackHole->position.z;
-
-        double r_squared = dx * dx + dy * dy + dz * dz;
-        double r_cubed = r_squared * sqrt(r_squared);
+        Vector3 r_vec = Vector3Subtract(bodies[i].position, blackHole->position);
+        float r_squared = Vector3LengthSqr(r_vec);
+        float r_cubed = r_squared * sqrtf(r_squared);
 
         if (r_cubed > MIN_DISTANCE_CUBED) {
-            double force_magnitude_body = (double)GRAVITATIONAL_CONSTANT * blackHole->mass / r_cubed;
-            double fx = -force_magnitude_body * dx;
-            double fy = -force_magnitude_body * dy;
-            double fz = -force_magnitude_body * dz;
+            // Fuerza sobre el cuerpo orbital (hacia el agujero negro)
+            float force_magnitude_body = (float)GRAVITATIONAL_CONSTANT * blackHole->mass / r_cubed;
+            Vector3 accel_body = Vector3Scale(r_vec, -force_magnitude_body);
+            accelerations[i] = Vector3Add(accelerations[i], accel_body);
 
-            accelerations[i].x += (float)fx;
-            accelerations[i].y += (float)fy;
-            accelerations[i].z += (float)fz;
-
-            double force_magnitude_blackHole = (double)GRAVITATIONAL_CONSTANT * bodies[i].mass / r_cubed;
-            fx = -force_magnitude_blackHole * dx;
-            fy = -force_magnitude_blackHole * dy;
-            fz = -force_magnitude_blackHole * dz;
-
-			blackHole->acceleration.x -= (float)fx;
-			blackHole->acceleration.y -= (float)fy;
-			blackHole->acceleration.z -= (float)fz;
+            // Fuerza sobre el agujero negro (hacia el cuerpo orbital)
+            float force_magnitude_blackHole = (float)GRAVITATIONAL_CONSTANT * bodies[i].mass / r_cubed;
+            Vector3 accel_blackHole = Vector3Scale(r_vec, force_magnitude_blackHole);
+            blackHole->acceleration = Vector3Add(blackHole->acceleration, accel_blackHole);
         }
         else {
-            double force_magnitude_body = (double)GRAVITATIONAL_CONSTANT * blackHole->mass / MIN_DISTANCE_CUBED;
-            double fx = -force_magnitude_body * dx;
-            double fy = -force_magnitude_body * dy;
-            double fz = -force_magnitude_body * dz;
-            accelerations[i].x += (float)fx;
-            accelerations[i].y += (float)fy;
-            accelerations[i].z += (float)fz;
+            // Fuerza sobre el cuerpo orbital (distancia mínima)
+            float force_magnitude_body = (float)GRAVITATIONAL_CONSTANT * blackHole->mass / MIN_DISTANCE_CUBED;
+            Vector3 accel_body = Vector3Scale(r_vec, -force_magnitude_body);
+            accelerations[i] = Vector3Add(accelerations[i], accel_body);
 
-            double force_magnitude_blackHole = (double)GRAVITATIONAL_CONSTANT * bodies[i].mass / r_cubed;
-            fx = -force_magnitude_blackHole * dx;
-            fy = -force_magnitude_blackHole * dy;
-            fz = -force_magnitude_blackHole * dz;
-
-			blackHole->acceleration.x -= (float)fx;
-			blackHole->acceleration.y -= (float)fy;
-			blackHole->acceleration.z -= (float)fz;
+            // Fuerza sobre el agujero negro (distancia mínima)
+            float force_magnitude_blackHole = (float)0.01f * GRAVITATIONAL_CONSTANT * bodies[i].mass / MIN_DISTANCE_CUBED;
+            Vector3 accel_blackHole = Vector3Scale(r_vec, force_magnitude_blackHole);
+            blackHole->acceleration = Vector3Add(blackHole->acceleration, accel_blackHole);
         }
     }
 }
 
-static void HandleBlackHoleCollision(BlackHole* blackHole, OrbitalBody* body, int n) {
+static void HandleBlackHoleCollision(BlackHole * blackHole, OrbitalBody * body, int n) {
     for (int i = 0; i < n; i++) {
         if (!body[i].isAlive) continue;
 
-        double ACCRETION_RADIUS = fmaxf(blackHole->radius, 0.05f * Vector3Length(body[i].position));
-        double dx = (double)body[i].position.x - (double)blackHole->position.x;
-        double dy = (double)body[i].position.y - (double)blackHole->position.y;
-        double dz = (double)body[i].position.z - (double)blackHole->position.z;
+        // Calcular radio de acreción
+        float ACCRETION_RADIUS = fmaxf(blackHole->radius, 0.05f * Vector3Length(body[i].position));
 
-        double distance = sqrt(dx * dx + dy * dy + dz * dz);
+        // Calcular distancia usando Vector3
+        Vector3 distance_vec = Vector3Subtract(body[i].position, blackHole->position);
+        float distance = Vector3Length(distance_vec);
 
+        // Verificar colisión
         if (distance < ACCRETION_RADIUS) {
             body[i].isAlive = false;
             blackHole->mass += body[i].mass;
             blackHole->radius += blackHole->growthRate;
-            blackHole->eventHorizonRadius = 2.95 * (blackHole->mass / 1.989E30) * 1E3;
+            blackHole->eventHorizonRadius = 2.95f * (blackHole->mass / 1.989E30f) * 1E3f;
         }
     }
-}
-
-static Vector3 ComputeBlackHoleSelfAcceleration(BlackHole* blackHole, OrbitalBody* bodies, int n) {
-    Vector3 acceleration = { 0.0f, 0.0f, 0.0f };
-
-    for (int i = 0; i < n; i++) {
-        if (!bodies[i].isAlive) continue;
-
-        double dx = (double)bodies[i].position.x - (double)blackHole->position.x;
-        double dy = (double)bodies[i].position.y - (double)blackHole->position.y;
-        double dz = (double)bodies[i].position.z - (double)blackHole->position.z;
-
-        double r_squared = dx * dx + dy * dy + dz * dz;
-        double r_cubed = r_squared * sqrt(r_squared);
-
-        if (r_cubed > 0.0) {
-            double force_magnitude = (double)GRAVITATIONAL_CONSTANT * (double)bodies[i].mass / r_cubed;
-
-            acceleration.x += (float)(force_magnitude * dx);
-            acceleration.y += (float)(force_magnitude * dy);
-            acceleration.z += (float)(force_magnitude * dz);
-        }
-    }
-
-    return acceleration;
 }
