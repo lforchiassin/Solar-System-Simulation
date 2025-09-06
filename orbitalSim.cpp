@@ -333,6 +333,10 @@ static void configureAsteroid(OrbitalBody* body, float centerMass, DispersionTyp
 
 //***** PHYSICS COMPUTATION FUNCTIONS *****//
 
+/**
+ * @brief Calculates gravitational accelerations for all bodies
+ */
+
 static void ComputeGravitationalAccelerations(OrbitalSim *sim, OrbitalBody* bodies, Vector3* accelerations, int n) {
     const double MIN_DISTANCE_CUBED = 1E29;   // Minimum distance cubed to avoid singularities
     const double INFLUENCE_DISTANCE_SQ = 1E15; // Threshold for planet-asteroid interactions
