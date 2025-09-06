@@ -1,8 +1,8 @@
 /**
- * @brief Ephemerides for orbital simulation
- * @author Marc S. Ressl
- * 
- * @copyright Copyright (c) 2022-2023
+ * @brief Implements an orbital simulation view with enhanced UI and menu system
+ * @author Dylan Frigerio, Luca Forchiassin
+ *
+ * @copyright Copyright (c) 2025
  */
 
 #ifndef EPHEMERIDES_H

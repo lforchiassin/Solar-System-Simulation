@@ -1,8 +1,8 @@
 /**
  * @brief Implements an orbital simulation view with enhanced UI and menu system
- * @author Marc S. Ressl (Enhanced by Claude)
+ * @author Dylan Frigerio, Luca Forchiassin 
  *
- * @copyright Copyright (c) 2022-2023
+ * @copyright Copyright (c) 2025
  */
 
 #include <time.h>
