@@ -200,26 +200,13 @@ static void initializeSolarSystem(OrbitalSim* sim) {
 static void initializeAlphaCentauriSystem(OrbitalSim* sim) {
     // Use Alpha Centauri data if available in ephemerides
     // For now, use modified solar system as placeholder
-    for (int i = 0; i < ALPHACENTAURISYSTEM_BODYNUM && i < sim->numBodies; i++) {
-        if (i < SOLARSYSTEM_BODYNUM) {
-            sim->bodies[i].mass = solarSystem[i].mass;
-            sim->bodies[i].radius = solarSystem[i].radius;
-            sim->bodies[i].position = solarSystem[i].position;
-            sim->bodies[i].velocity = solarSystem[i].velocity;
-            sim->bodies[i].color = solarSystem[i].color;
-            sim->bodies[i].isAlive = true;
-
-            // Modify for Alpha Centauri characteristics
-            if (i == 0) { // Primary star
-                sim->bodies[i].color = ORANGE;
-                sim->bodies[i].mass *= 1.1f; // Slightly more massive
-            }
-            else if (i == 1) { // Secondary star (replace Mercury)
-                sim->bodies[i].color = RED;
-                sim->bodies[i].mass = solarSystem[0].mass * 0.9f; // Binary companion
-                sim->bodies[i].position = Vector3Scale(sim->bodies[i].position, 20.0f); // Further out
-            }
-        }
+    for (int i = 0; i < ALPHACENTAURISYSTEM_BODYNUM; i++) {
+        sim->bodies[i].mass = alphaCentauriSystem[i].mass;
+        sim->bodies[i].radius = alphaCentauriSystem[i].radius;
+        sim->bodies[i].position = alphaCentauriSystem[i].position;
+        sim->bodies[i].velocity = alphaCentauriSystem[i].velocity;
+        sim->bodies[i].color = alphaCentauriSystem[i].color;
+        sim->bodies[i].isAlive = true;
     }
 }
 
@@ -347,7 +334,7 @@ static void ComputeGravitationalAccelerations(OrbitalSim *sim, OrbitalBody* bodi
     }
 
     // 2. Compute gravitational interactions between system bodies
-    int systemBodies = (n > 100) ? 9 : n; // Assume first 9 are system bodies if many total bodies
+    int systemBodies = sim->systemBodies;
     for (int i = 0; i < systemBodies; i++) {
         if (!bodies[i].isAlive) continue;
 
@@ -386,7 +373,7 @@ static void ComputeGravitationalAccelerations(OrbitalSim *sim, OrbitalBody* bodi
             Vector3 r_vec = Vector3Subtract(bodies[i].position, bodies[0].position);
             double r_squared = Vector3LengthSqr(r_vec);
             double r_cubed = r_squared * sqrt(r_squared);
-            
+
             double force_magnitude;
             Vector3 accel_asteroid;
 
@@ -404,20 +391,37 @@ static void ComputeGravitationalAccelerations(OrbitalSim *sim, OrbitalBody* bodi
             if (sim->config.easterEgg == EASTER_EGG_JUPITER_1000X)
             {
                 if (sim->config.systemType == SYSTEM_TYPE_SOLAR && sim->numBodies > 5) {
-                    r_vec = Vector3Subtract(bodies[i].position, bodies[0].position);
+                    r_vec = Vector3Subtract(bodies[i].position, bodies[5].position);
                     r_squared = Vector3LengthSqr(r_vec);
                     r_cubed = r_squared * sqrt(r_squared);
 
                     if (r_cubed > MIN_DISTANCE_CUBED) {
-                        force_magnitude = GRAVITATIONAL_CONSTANT * bodies[0].mass / r_cubed;
+                        force_magnitude = GRAVITATIONAL_CONSTANT * bodies[5].mass / r_cubed;
                         accel_asteroid = Vector3Scale(r_vec, -force_magnitude);
                         accelerations[i] = Vector3Add(accelerations[i], accel_asteroid);
                     }
                     else {
-                        force_magnitude = GRAVITATIONAL_CONSTANT * bodies[0].mass / MIN_DISTANCE_CUBED;
+                        force_magnitude = GRAVITATIONAL_CONSTANT * bodies[5].mass / MIN_DISTANCE_CUBED;
                         accel_asteroid = Vector3Scale(r_vec, -force_magnitude);
                         accelerations[i] = Vector3Add(accelerations[i], accel_asteroid);
                     }
+                }
+            }
+            if (sim->config.systemType == SYSTEM_TYPE_ALPHA_CENTAURI)
+            {
+                r_vec = Vector3Subtract(bodies[i].position, bodies[1].position);
+                r_squared = Vector3LengthSqr(r_vec);
+                r_cubed = r_squared * sqrt(r_squared);
+
+                if (r_cubed > MIN_DISTANCE_CUBED) {
+                    force_magnitude = GRAVITATIONAL_CONSTANT * bodies[1].mass / r_cubed;
+                    accel_asteroid = Vector3Scale(r_vec, -force_magnitude);
+                    accelerations[i] = Vector3Add(accelerations[i], accel_asteroid);
+                }
+                else {
+                    force_magnitude = GRAVITATIONAL_CONSTANT * bodies[1].mass / MIN_DISTANCE_CUBED;
+                    accel_asteroid = Vector3Scale(r_vec, -force_magnitude);
+                    accelerations[i] = Vector3Add(accelerations[i], accel_asteroid);
                 }
             }
         }
@@ -431,10 +435,10 @@ static void ComputeGravitationalAccelerations(OrbitalSim *sim, OrbitalBody* bodi
             if (!bodies[j].isAlive) continue;
 
             Vector3 r_vec = Vector3Subtract(bodies[j].position, bodies[i].position);
-            float r_squared = Vector3LengthSqr(r_vec);
+            double r_squared = Vector3LengthSqr(r_vec);
 
             if (r_squared < INFLUENCE_DISTANCE_SQ && r_squared > MIN_DISTANCE_CUBED) {
-                float r_cubed = r_squared * sqrt(r_squared);
+                double r_cubed = r_squared * sqrt(r_squared);
                 double force_magnitude = GRAVITATIONAL_CONSTANT / r_cubed;
                 Vector3 accel_asteroid = Vector3Scale(r_vec, -force_magnitude * bodies[i].mass);
                 accelerations[j] = Vector3Add(accelerations[j], accel_asteroid);
