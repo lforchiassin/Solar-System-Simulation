@@ -197,7 +197,7 @@ void renderView(View* view, OrbitalSim* sim, int reset) {
         menuState.confirmDialogTimer += GetFrameTime();
     }
 
-    static float lodMultiplier = 0.8f;
+    static float lodMultiplier = 1.0f;
 
     // Handle menu input
     HandleMenuInput(sim);
@@ -244,7 +244,7 @@ void renderView(View* view, OrbitalSim* sim, int reset) {
     int rendered_planets = 0;
     int rendered_asteroids = 0;
 
-    // Render celestial bodies with LOD (código existente...)
+    // Render celestial bodies with LOD
     for (int i = 0; i < sim->numBodies; i++) {
         OrbitalBody& body = sim->bodies[i];
         if (!body.isAlive) continue;
@@ -277,13 +277,14 @@ void renderView(View* view, OrbitalSim* sim, int reset) {
             float lodFactor = (relativeDistance > 0.8f) ? 0.05f :
                 (relativeDistance > 0.4f) ? 0.25f : 1.0f;
 
+			// Deterministic random bit generator for rendering decision
             if (((i * 73 + 17) % 1000) < (int)(lodFactor * 1000)) {
                 float asteroidRadius = RADIUS_SCALE(body.radius) * 0.3f;
                 if (relativeDistance < 0.3f) {
-                    DrawSphereEx(scaledPosition, asteroidRadius, 10, 10, body.color);
+                    DrawSphereEx(scaledPosition, asteroidRadius, 5, 5, body.color);
                 }
                 else if (relativeDistance < 0.7f) {
-                    DrawSphereEx(scaledPosition, asteroidRadius * 0.6f, 4, 4, body.color);
+                    DrawSphereEx(scaledPosition, asteroidRadius * 0.6f, 3, 3, body.color);
                 }
                 else {
                     DrawPoint3D(scaledPosition, body.color);
@@ -293,7 +294,7 @@ void renderView(View* view, OrbitalSim* sim, int reset) {
         }
     }
 
-    // Enhanced Black Hole Rendering (código existente...)
+    // Enhanced Black Hole Rendering
     if (sim->blackHole.isActive) {
         Vector3 blackHoleScaledPos = Vector3Scale(sim->blackHole.position, SCALE_FACTOR);
         double eventHorizonScaledRadius = RADIUS_SCALE(sim->blackHole.radius) * 2;
@@ -324,23 +325,23 @@ void renderView(View* view, OrbitalSim* sim, int reset) {
 	// spaceship rendering
     RenderShip(&view->camera);
 
+	// Tractor beam effect
     if (beamActive) {
         beamTimer += GetFrameTime();
 
-        // Color violeta pulsante
         float pulse = (sinf(GetTime() * 20.0f) + 1.0f) * 0.5f;
         Color violet = { 200, (unsigned char)(pulse * 100), 255, 200 };
 
         DrawCylinderEx(
             beamStartPos,
             beamEndPos,
-            0.2f,  // radio superior
-            0.2f,  // radio inferior
+            0.2f,  
+            0.2f,  
             16,
             violet
         );
 
-        // Cuando pasa 1 segundo, spawnea el agujero negro
+		// After 1 second, create black hole
         if (beamTimer > 1.0f) {
             Vector3 blackHolePos = Vector3Scale(beamEndPos, 1.0f / SCALE_FACTOR);
             createBlackHole(sim, blackHolePos);
@@ -357,10 +358,11 @@ void renderView(View* view, OrbitalSim* sim, int reset) {
 	static bool f3PressedLastFrame = true;
     if (IsKeyPressed(KEY_F3)) f3PressedLastFrame = !f3PressedLastFrame;
 
-    // Draw Enhanced UI Elements (resto del código existente...)
+    // Draw Enhanced UI Elements
     if (!menuState.isOpen) {
         DrawEnhancedTopHUD(sim, timestamp);
 
+		// Show/hide side panels with F3
         if (f3PressedLastFrame)
         {
             DrawEnhancedLeftPanel(sim, lodMultiplier, rendered_planets, rendered_asteroids);
@@ -472,11 +474,11 @@ static void InitializeShip(void) {
             shipRenderer.model.materials[i].shader = LoadShader(NULL, NULL); 
         }
         if (shipRenderer.isLoaded) {
-            printf("✅ Modelo cargado correctamente\n");
+            printf("Modelo cargado correctamente\n");
         }
         else {
-            printf("❌ Error: No se pudo cargar el modelo ship.obj\n");
-            printf("   Verifica que el archivo existe en: assets/ship.obj\n");
+            printf("Error: No se pudo cargar el modelo Ufo.obj\n");
+            printf("Verifica que el archivo existe en: assets/Ufo.obj\n");
         }
 
         for (int i = 0; i < shipRenderer.model.meshCount; i++) {
@@ -751,7 +753,7 @@ static void DrawMainMenu(OrbitalSim* sim) {
 		// Inicialize timer if just pressed reset
         if (resetPressed && !menuState.showConfirmReset) {
             menuState.showConfirmReset = true;
-            menuState.confirmDialogTimer = 0.0f;  // Resetear el timer
+            menuState.confirmDialogTimer = 0.0f;  // Reset timer
         }
 
         // Confirmation dialog
@@ -795,7 +797,7 @@ static void DrawMainMenu(OrbitalSim* sim) {
 
         if (noPressed) {
             menuState.showConfirmReset = false;
-            menuState.confirmDialogTimer = 0.0f;  // Resetear timer
+            menuState.confirmDialogTimer = 0.0f;  // Reset timer
         }
     }
 

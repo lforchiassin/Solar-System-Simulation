@@ -15,17 +15,16 @@ El sistema utiliza una configuración temporal optimizada para balancear precisi
 - **Velocidad de simulación**: 100 días simulados por segundo real
 - **FPS objetivo**: 60 frames por segundo
 
-Esta configuración permite mantener alta precisión en los cálculos físicos mientras acelera significativamente la visualización de fenómenos orbitales de largo plazo. La simulación puede ejecutarse de forma estable durante períodos extensos (100+ años) sin mostrar comportamientos físicamente inconsistentes o deriva numérica significativa.
+Esta configuración permite mantener alta precisión en los cálculos físicos mientras acelera significativamente la visualización de fenómenos orbitales de largo plazo.
 
 ## Verificación del tipo de datos float vs double
 
-Se realizó un análisis exhaustivo de la precisión numérica requerida:
+Se utilizó double para cálculos críticos por dos razones principales:
 
-- **Variables de masa, posición y velocidad**: Se utiliza `double` para los cálculos críticos de fuerzas gravitatorias donde la precisión es fundamental para evitar acumulación de errores.
-- **Distancias al cuadrado y al cubo**: Se emplean `double` para minimizar errores de redondeo en divisiones y operaciones con exponentes.
+- **Límites de rango**: Las escalas astronómicas (>10¹¹ metros) elevadas al cuadrado o cubo exceden el rango máximo de float (3.4 × 10³⁸), causando overflow
+- **Calculo de distancias**: Se calcula la distancia entre dos objetos una sola vez por par, reutilizando el valor para ambos cálculos de fuerza, minimizando errores acumulativos. Se utiliza el calculo de distancia al cuadrado para evitar operaciones de raíz cuadrada innecesarias.
 - **Optimización de algoritmo**: El sistema calcula fuerzas entre pares de objetos una sola vez, aplicando la tercera ley de Newton (F_ij = -F_ji), reduciendo el número de cálculos y manteniendo consistencia numérica.
 
-La precisión de `double` es suficiente para manejar las escalas astronómicas involucradas (10^11 metros) manteniendo estabilidad orbital durante simulaciones de décadas.
 
 ## Complejidad computacional con asteroides
 
@@ -45,9 +44,14 @@ La implementación original tenía complejidad O(n²) donde se calculaban las in
 ### Optimizaciones implementadas
 
 1. **Jerarquía de influencias gravitatorias**:
+#### Sistema Solar
    - **Sol/estrella principal**: Influencia calculada para todos los asteroides
-   - **Planetas**: Solo calculada dentro de una distancia de influencia (1E15 m²)
+   - **Planetas**: Fuerzas calculadas entre todos los planetas, y solo con asteroides dentro del radio de influencia (1E15 m²)
    - **Asteroides entre sí**: Interacciones eliminadas (despreciables comparado con cuerpos masivos)
+
+#### Sistema Alpha Centauri
+   - **Estrellas binarias**: Influencia calculada para todos los asteroides
+   - **Asteroides entre sí**: Interacciones eliminadas
 
 2. **Optimizaciones de cálculo**:
    - Uso de `x * x` en lugar de `pow(x, 2)` para exponentes
@@ -81,7 +85,7 @@ Implementación de un sistema dinámico de nivel de detalle para optimizar el re
 - **Tecla R**: Resetear LOD al valor por defecto
 
 ### Culling inteligente para asteroides
-- Muestreo pseudo-aleatorio basado en índice del asteroide
+- Algoritmo pseudo-aleatorio determinístico para asteroides: (i * 73 + 17) % 1000 < lodFactor * 1000
 - Factor de LOD dinámico según distancia
 - Reducción progresiva de asteroides renderizados en distancias lejanas
 
@@ -93,7 +97,6 @@ Desarrollo de un sistema de menús completo que permite modificar la simulación
 #### Configuración de Sistema
 - Selección entre Sistema Solar y Alpha Centauri
 - Cambio instantáneo entre sistemas planetarios
-- Datos precisos de efemérides astronómicas
 
 #### Control de Asteroides
 - Campo de texto editable para cantidad (0-5000)
@@ -105,13 +108,13 @@ Desarrollo de un sistema de menús completo que permite modificar la simulación
 
 #### Easter Eggs
 - **Phi Effect**: Todos los asteroides generados en phi = 0
-- **Jupiter 1000x**: Jupiter con masa multiplicada por 1000
+- **Jupiter 1000x**: Jupiter con masa multiplicada por 1000. Cuando esta activa se incluye para los calculos gravitatorios de los asteroides.
 
 ### 2. Nave Espacial Interactiva
 - Modelo 3D de nave UFO que orbita la cámara
 - Animación de rotación continua
 - Capacidad de lanzar agujeros negros con rayo láser violeta
-- Posicionamiento relativo a la cámara para inmersión visual
+- Posicionamiento relativo a la cámara
 
 ### 3. Sistema de Agujeros Negros
 Implementación física completa de agujeros negros:
@@ -129,10 +132,7 @@ Implementación física completa de agujeros negros:
 - Efecto visual de partículas orbitando
 
 ### 4. Sistema de Alpha Centauri
-Implementación del sistema estelar binario más cercano:
-- Alpha Centauri A y B con datos astronómicos precisos
-- Órbitas binarias auténticas
-- Masas y radios estelares reales
+Implementación del sistema estelar binario más cercano.
 
 ### 5. Interfaz de Usuario Avanzada
 #### Panel de estado en tiempo real
@@ -146,6 +146,13 @@ Implementación del sistema estelar binario más cercano:
 - Campos de texto editables con cursor parpadeante
 - Confirmación de reset con temporizador de seguridad
 - Indicadores de estado animados
+
+## Arquitectura de variables globales
+El sistema de interfaz utiliza variables globales estratégicamente:
+
+- uiAnim: Mantiene estados de animación entre frames para transiciones suaves sin recálculos
+- menuState: Persiste selecciones, entrada de texto y timers a través de múltiples llamadas a renderView()
+- shipRenderer: Evita recargar modelos OpenGL, optimizando recursos gráficos y manteniendo transformaciones
 
 ## Controles del juego
 
@@ -172,26 +179,6 @@ Implementación del sistema estelar binario más cercano:
 - **Teclas de flecha**: Mover cursor en campos de texto
 - **Enter**: Confirmar entrada de texto
 - **Backspace/Delete**: Editar texto
-
-## Características técnicas destacadas
-
-### Optimización de rendering
-- Culling por distancia con múltiples niveles
-- Reducción progresiva de geometría según distancia
-- Sistema de puntos 3D para objetos muy lejanos
-- Muestreo estadístico para grandes cantidades de asteroides
-
-### Física precisa
-- Integración numérica mejorada con velocidades intermedias
-- Manejo de singularidades gravitatorias
-- Conservación de momento y energía
-- Estabilidad orbital a largo plazo
-
-### Experiencia de usuario
-- Animaciones suaves y efectos visuales
-- Retroalimentación visual inmediata
-- Sistema de confirmación para acciones destructivas
-- Información contextual y ayuda integrada
 
 ## Rendimiento
 
